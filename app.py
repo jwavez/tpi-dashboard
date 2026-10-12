@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import json
 import os
 from datetime import datetime
+import requests
 
 st.set_page_config(page_title="TPI Dashboard", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
 
@@ -18,11 +19,76 @@ st.markdown("""
 .stat-pill { background: #1e293b; border-radius: 12px; padding: 0.6rem; text-align: center; }
 .stat-label { font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; }
 .stat-value { font-size: 1.15rem; font-weight: 700; color: #e2e8f0; }
-.brand-top { font-size: 0.72rem; letter-spacing: 1.2px; color: #94a3b8; font-weight: 650; margin-bottom: 0.4rem; }
-.vip-pill { background: linear-gradient(90deg, #fbbf24, #f59e0b); color: #0f172a; font-size: 0.65rem; font-weight: 750; padding: 0.15rem 0.5rem; border-radius: 999px; margin-left: 0.4rem; letter-spacing: 0.5px; }
-.footer-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 1px solid #1e293b; text-align: center; color: #64748b; font-size: 0.72rem; padding: 0.45rem; z-index: 999; }
+.brand-top { font-size: 0.85rem; letter-spacing: 1.4px; color: #e2e8f0; font-weight: 700; margin-bottom: 0.6rem; }
+.vip-pill { background: linear-gradient(90deg, #fbbf24, #f59e0b); color: #0f172a; font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; margin-left: 0.5rem; letter-spacing: 0.6px; box-shadow: 0 0 8px rgba(251,191,36,0.5); }
+.footer-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 1px solid #1e293b; text-align: center; color: #94a3b8; font-size: 0.75rem; padding: 0.5rem; z-index: 999; }
+.login-box { max-width: 420px; margin: 8vh auto; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
+
+# ---------- Discord OAuth ----------
+CLIENT_ID = st.secrets.get("DISCORD_CLIENT_ID", "")
+CLIENT_SECRET = st.secrets.get("DISCORD_CLIENT_SECRET", "")
+REDIRECT_URI = st.secrets.get("REDIRECT_URI", "https://tradersedge-tpi.streamlit.app/")
+SERVER_ID = "1177276514857922560"
+VIP_ROLE_ID = "1177332827742801990"
+
+def get_discord_user():
+    if "discord_user" in st.session_state:
+        return st.session_state.discord_user
+    code = st.query_params.get("code")
+    if not code or not CLIENT_ID or not CLIENT_SECRET:
+        return None
+    token_res = requests.post(
+        "https://discord.com/api/oauth2/token",
+        data={
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": REDIRECT_URI,
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=10,
+    )
+    if token_res.status_code != 200:
+        return None
+    token = token_res.json().get("access_token")
+    user_res = requests.get(
+        "https://discord.com/api/users/@me",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10,
+    )
+    if user_res.status_code != 200:
+        return None
+    user = user_res.json()
+    guild_res = requests.get(
+        f"https://discord.com/api/users/@me/guilds/{SERVER_ID}/member",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10,
+    )
+    roles = guild_res.json().get("roles", []) if guild_res.status_code == 200 else []
+    if VIP_ROLE_ID not in roles:
+        st.error("You do not have the VIP role. Access denied.")
+        st.stop()
+    st.session_state.discord_user = user.get("username", "VIP")
+    st.query_params.clear()
+    return st.session_state.discord_user
+
+discord_user = get_discord_user()
+
+if not discord_user:
+    st.markdown('<div class="login-box">', unsafe_allow_html=True)
+    st.markdown('<div class="brand-top">TRADERS EDGE <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
+    st.subheader("TPI Dashboard")
+    st.write("Login with Discord to access the VIP dashboard.")
+    auth_url = (
+        f"https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}"
+        f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20guilds.members.read"
+    )
+    st.link_button("Login with Discord", auth_url, type="primary")
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.stop()
 
 # ---------- Session state ----------
 if "my_portfolio" not in st.session_state:
@@ -74,13 +140,12 @@ def get_data():
             {"coin": "ADA", "pct": 1.2, "note": "Research L1"},
         ],
         "perf_7d": -0.8, "perf_30d": -1.8, "perf_90d": 2.4, "max_dd": -1.8, "sharpe": 0.65,
-        "discord_user": "Trader",  # replace with real Discord name when OAuth is wired
     }
 
 data = get_data()
 
 # ---------- Header with branding + VIP ----------
-st.markdown(f'<div class="brand-top">TRADERS EDGE <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="brand-top">TRADERS EDGE <span class="vip-pill">VIP</span> · {discord_user}</div>', unsafe_allow_html=True)
 
 # ---------- Personal portfolio ----------
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
@@ -296,10 +361,10 @@ for col, (lab, val) in zip([c1,c2,c3,c4,c5], [
         st.markdown(f'<div class="stat-pill"><div class="stat-label">{lab}</div><div class="stat-value">{val}</div></div>', unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-st.caption(f"Updated just now · {data['timestamp']} · {data['discord_user']}")
+st.caption(f"Updated just now · {data['timestamp']} · {discord_user}")
 
 # Fixed bottom branding bar
-st.markdown('<div class="footer-bar">TRADERS EDGE · TPI DASHBOARD · VIP</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer-bar">TRADERS EDGE · TPI DASHBOARD · VIP ONLY</div>', unsafe_allow_html=True)
 
 if st.button("Refresh data", type="primary"):
     st.rerun()
