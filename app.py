@@ -123,7 +123,7 @@ def compute_live_tpi():
 
         # Allocation
         btc_w = 50 if regime == "Bullish" else 40 if regime == "Neutral" else 30
-        eth_w = 15 if regime == "Bullish" else 10 else 5
+        eth_w = 15 if regime == "Bullish" else (10 if regime == "Neutral" else 5)
         gold_w = 13
         cash_w = 100 - btc_w - eth_w - gold_w - 6
         alts_w = 6
