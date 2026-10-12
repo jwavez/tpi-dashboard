@@ -31,7 +31,10 @@ st.markdown("""
 .login-bg {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: #0b1220 url('login_bg.jpg') center center / cover no-repeat;
+    background-color: #0b1220;
+    background-position: center center;
+    background-size: cover;
+    background-repeat: no-repeat;
     z-index: -1;
 }
 .login-overlay {
@@ -99,7 +102,15 @@ def get_discord_user():
 discord_user = get_discord_user()
 
 if not discord_user:
-    st.markdown('<div class="login-bg"></div><div class="login-overlay"></div>', unsafe_allow_html=True)
+    # Login background — try local file first
+    bg_html = ""
+    for fname in ["login_bg.jpg", "login_bg.png", "login_bg.jpeg"]:
+        if os.path.exists(fname):
+            bg_html = f'<div class="login-bg" style="background-image: url(\'{fname}\');"></div><div class="login-overlay"></div>'
+            break
+    if not bg_html:
+        bg_html = '<div class="login-overlay"></div>'
+    st.markdown(bg_html, unsafe_allow_html=True)
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
     st.markdown('<div class="brand-row" style="justify-content:center; margin-bottom:0.2rem;"><span class="brand-text">TRADERS EDGE</span> <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
     st.markdown('<div class="login-divider"></div>', unsafe_allow_html=True)
