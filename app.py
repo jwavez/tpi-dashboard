@@ -27,9 +27,10 @@ st.markdown("""
 .vip-pill { background: linear-gradient(90deg, #fbbf24, #f59e0b); color: #0f172a; font-size: 0.75rem; font-weight: 800; padding: 0.22rem 0.65rem; border-radius: 999px; letter-spacing: 0.6px; box-shadow: 0 0 8px rgba(251,191,36,0.5); }
 .admin-pill { background: linear-gradient(90deg, #ef4444, #dc2626); color: white; font-size: 0.75rem; font-weight: 800; padding: 0.22rem 0.65rem; border-radius: 999px; }
 .footer-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 1px solid #1e293b; text-align: center; color: #94a3b8; font-size: 0.75rem; padding: 0.5rem; z-index: 999; }
-.login-box { max-width: 440px; margin: 18vh auto; text-align: center; background: #0f172a; border: 1px solid #1e293b; border-radius: 20px; padding: 2.5rem 2rem; box-shadow: 0 10px 40px rgba(0,0,0,0.4); }
-.login-title { font-size: 1.8rem; font-weight: 700; color: #e2e8f0; margin: 0.4rem 0 0.2rem 0; }
-.login-sub { color: #94a3b8; font-size: 0.95rem; margin-bottom: 1.4rem; }
+.login-box { max-width: 480px; margin: 22vh auto; text-align: center; background: linear-gradient(180deg, #111827 0%, #0f172a 100%); border: 1px solid #334155; border-radius: 24px; padding: 3rem 2.2rem; box-shadow: 0 20px 60px rgba(0,0,0,0.55); }
+.login-title { font-size: 2rem; font-weight: 700; color: #f8fafc; margin: 0.6rem 0 0.3rem 0; letter-spacing: -0.3px; }
+.login-sub { color: #94a3b8; font-size: 1rem; margin-bottom: 1.8rem; }
+.login-divider { height: 1px; background: #1e293b; margin: 1.2rem 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -86,7 +87,8 @@ discord_user = get_discord_user()
 
 if not discord_user:
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
-    st.markdown('<div class="brand-row" style="justify-content:center;"><span class="brand-text">TRADERS EDGE</span> <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="brand-row" style="justify-content:center; margin-bottom:0.2rem;"><span class="brand-text">TRADERS EDGE</span> <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-divider"></div>', unsafe_allow_html=True)
     st.markdown('<div class="login-title">TPI Dashboard</div>', unsafe_allow_html=True)
     st.markdown('<div class="login-sub">Members-only allocation desk</div>', unsafe_allow_html=True)
     auth_url = (
@@ -94,6 +96,7 @@ if not discord_user:
         f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20guilds.members.read"
     )
     st.link_button("Login with Discord", auth_url, type="primary", use_container_width=True)
+    st.markdown('<div style="margin-top:1.2rem; font-size:0.75rem; color:#64748b;">Access restricted to VIP & Admin roles</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
@@ -245,7 +248,7 @@ role_pills = '<span class="vip-pill">VIP</span>'
 if is_admin:
     role_pills += ' <span class="admin-pill">ADMIN</span>'
 
-st.markdown("<div style='height: 0.4rem;'></div>", unsafe_allow_html=True)
+st.markdown("<div style='height: 1.8rem;'></div>", unsafe_allow_html=True)
 st.markdown(
     f'<div class="brand-row">{logo_html}<span class="brand-text">TRADERS EDGE</span>{role_pills}<span style="color:#94a3b8; margin-left:0.5rem;">· {discord_user}</span></div>',
     unsafe_allow_html=True,
