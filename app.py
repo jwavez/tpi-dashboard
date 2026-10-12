@@ -24,7 +24,6 @@ st.markdown("""
         padding: 1rem 1.2rem;
         border: 1px solid #334155;
         margin-bottom: 0.75rem;
-        position: relative;
     }
     .title { font-size: 1.65rem; font-weight: 750; margin: 0.15rem 0 0.05rem 0; }
     .subtitle { font-size: 0.95rem; color: #94a3b8; margin-bottom: 0.4rem; }
@@ -36,30 +35,14 @@ st.markdown("""
     .stat-label { font-size: 0.64rem; color: #94a3b8; text-transform: uppercase; }
     .stat-value { font-size: 1.1rem; font-weight: 700; }
     .alert { background: #422006; border-left: 4px solid #fbbf24; padding: 0.55rem 0.8rem; border-radius: 8px; margin-bottom: 0.6rem; }
-    .brand-header {
-        text-align: center;
-        margin-bottom: 0.6rem;
-        font-weight: 700;
-        letter-spacing: 1.5px;
-        color: #22d3ee;
-        font-size: 1.35rem;
-    }
-    .brand-sub { font-size: 0.75rem; color: #64748b; letter-spacing: 2px; margin-top: -0.2rem; }
-    .watermark {
-        position: fixed;
-        bottom: 12px;
-        right: 16px;
-        font-size: 0.7rem;
-        color: #334155;
-        letter-spacing: 1px;
-        pointer-events: none;
-        z-index: 999;
-    }
+    .brand-header { text-align: center; margin-bottom: 0.4rem; font-weight: 700; letter-spacing: 1.5px; color: #22d3ee; font-size: 1.35rem; }
+    .brand-sub { font-size: 0.75rem; color: #64748b; letter-spacing: 2px; margin-top: -0.15rem; text-align: center; }
+    .watermark { position: fixed; bottom: 12px; right: 16px; font-size: 0.7rem; color: #334155; letter-spacing: 1px; pointer-events: none; z-index: 999; }
     .perf-card { background: #0f172a; border-radius: 12px; padding: 0.8rem; border: 1px solid #334155; text-align: center; }
+    .gauge-label { text-align: center; font-size: 0.72rem; color: #94a3b8; margin-top: -0.4rem; }
 </style>
 """, unsafe_allow_html=True)
 
-# Discord OAuth
 DISCORD_CLIENT_ID = st.secrets.get("DISCORD_CLIENT_ID", "1559177904636825690")
 DISCORD_CLIENT_SECRET = st.secrets.get("DISCORD_CLIENT_SECRET", "I0waUTNBVXSEBEmsdorwBavrUD57OmUI")
 DISCORD_SERVER_ID = "1177276514857922560"
@@ -118,7 +101,6 @@ if "code" in query_params and not st.session_state.discord_user:
         st.query_params.clear()
         st.rerun()
 
-# Clean text branding
 st.markdown('<div class="brand-header">TRADERS EDGE</div>', unsafe_allow_html=True)
 st.markdown('<div class="brand-sub">TPI DASHBOARD</div>', unsafe_allow_html=True)
 st.markdown('<div class="watermark">TRADERS EDGE</div>', unsafe_allow_html=True)
@@ -198,8 +180,21 @@ if len(data["regime_history"]) >= 2:
     if last != prev:
         data["alert"] = f"Regime changed from {prev} to {last}"
 
-def make_gauge(value, title, color_mode="neutral"):
-    if color_mode in ("fng", "dom"):
+def gauge_label(value, kind):
+    if kind == "macro":
+        return "Risk-On" if value > 0.2 else "Neutral" if value > -0.2 else "Risk-Off"
+    if kind == "ltpi":
+        return "Strong" if value > 0.3 else "Bullish" if value > 0 else "Weak" if value > -0.3 else "Bearish"
+    if kind == "mtpi":
+        return "Strong" if value > 0.3 else "Bullish" if value > 0 else "Weak" if value > -0.3 else "Bearish"
+    if kind == "fng":
+        return "Extreme Greed" if value > 0.6 else "Greed" if value > 0.2 else "Neutral" if value > -0.2 else "Fear" if value > -0.6 else "Extreme Fear"
+    if kind == "dom":
+        return "BTC Strength" if value > 0 else "Alt Strength"
+    return ""
+
+def make_gauge(value, title, kind="neutral"):
+    if kind in ("fng", "dom"):
         bar_color = "#22c55e" if value > 0 else "#ef4444"
     else:
         bar_color = "#fbbf24"
@@ -233,11 +228,21 @@ st.markdown(f'<div class="subtitle">LEAN BUY · <span class="verdict">{data["reg
 if user:
     st.caption(f"Logged in as {user.get('username', 'VIP Member')}")
 g1, g2, g3, g4, g5 = st.columns(5)
-with g1: st.plotly_chart(make_gauge(data["macro"], "Macro"), use_container_width=True, config={"displayModeBar": False})
-with g2: st.plotly_chart(make_gauge(data["ltpi"], "LTPI Long-Term"), use_container_width=True, config={"displayModeBar": False})
-with g3: st.plotly_chart(make_gauge(data["mtpi"], "MTPI Medium-Term"), use_container_width=True, config={"displayModeBar": False})
-with g4: st.plotly_chart(make_gauge(data["fng_norm"], f"Fear & Greed {data['fng']}", "fng"), use_container_width=True, config={"displayModeBar": False})
-with g5: st.plotly_chart(make_gauge(data["btc_dom_trend"], "BTC Dom Trend", "dom"), use_container_width=True, config={"displayModeBar": False})
+with g1:
+    st.plotly_chart(make_gauge(data["macro"], "Macro", "macro"), use_container_width=True, config={"displayModeBar": False})
+    st.markdown(f'<div class="gauge-label">{gauge_label(data["macro"], "macro")}</div>', unsafe_allow_html=True)
+with g2:
+    st.plotly_chart(make_gauge(data["ltpi"], "LTPI Long-Term", "ltpi"), use_container_width=True, config={"displayModeBar": False})
+    st.markdown(f'<div class="gauge-label">{gauge_label(data["ltpi"], "ltpi")}</div>', unsafe_allow_html=True)
+with g3:
+    st.plotly_chart(make_gauge(data["mtpi"], "MTPI Medium-Term", "mtpi"), use_container_width=True, config={"displayModeBar": False})
+    st.markdown(f'<div class="gauge-label">{gauge_label(data["mtpi"], "mtpi")}</div>', unsafe_allow_html=True)
+with g4:
+    st.plotly_chart(make_gauge(data["fng_norm"], f"Fear & Greed {data['fng']}", "fng"), use_container_width=True, config={"displayModeBar": False})
+    st.markdown(f'<div class="gauge-label">{gauge_label(data["fng_norm"], "fng")}</div>', unsafe_allow_html=True)
+with g5:
+    st.plotly_chart(make_gauge(data["btc_dom_trend"], "BTC Dom Trend", "dom"), use_container_width=True, config={"displayModeBar": False})
+    st.markdown(f'<div class="gauge-label">{gauge_label(data["btc_dom_trend"], "dom")}</div>', unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
@@ -363,7 +368,21 @@ st.caption(f"Last updated {data['timestamp']}  ·  Traders Edge VIP")
 if st.button("Refresh data", type="primary"):
     st.rerun()
 
-if DISCORD_WEBHOOK and st.button("Send daily summary to Discord"):
-    msg = f"**TPI Daily** · {data['verdict']} · {data['regime']}\n{data['btc']}% BTC · {data['eth']}% ETH · {data['gold']}% Gold · {data['cash']}% Cash · {data['alts']}% Alts"
-    requests.post(DISCORD_WEBHOOK, json={"content": msg})
-    st.success("Summary sent")
+# Discord summary button — always show if webhook exists
+if DISCORD_WEBHOOK:
+    if st.button("Send daily summary to Discord"):
+        msg = (
+            f"**TPI Daily** · {data['verdict']} · {data['regime']}\n"
+            f"{data['btc']}% BTC · {data['eth']}% ETH · {data['gold']}% Gold · "
+            f"{data['cash']}% Cash · {data['alts']}% Alts"
+        )
+        try:
+            r = requests.post(DISCORD_WEBHOOK, json={"content": msg}, timeout=10)
+            if r.status_code in (200, 204):
+                st.success("Summary sent to Discord")
+            else:
+                st.error(f"Discord returned {r.status_code}")
+        except Exception as e:
+            st.error(f"Failed to send: {e}")
+else:
+    st.caption("Add DISCORD_WEBHOOK to secrets to enable the summary button")
