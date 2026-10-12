@@ -2,10 +2,11 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import urllib.parse
 import json
 import os
+import numpy as np
 
 st.set_page_config(
     page_title="Traders Edge · TPI",
@@ -43,17 +44,21 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Discord OAuth
 DISCORD_CLIENT_ID = st.secrets.get("DISCORD_CLIENT_ID", "1559177904636825690")
 DISCORD_CLIENT_SECRET = st.secrets.get("DISCORD_CLIENT_SECRET", "I0waUTNBVXSEBEmsdorwBavrUD57OmUI")
 DISCORD_SERVER_ID = "1177276514857922560"
 VIP_ROLE_ID = "1177332827742801990"
 REDIRECT_URI = st.secrets.get("REDIRECT_URI", "http://localhost:8501/")
-DISCORD_WEBHOOK = str(st.secrets.get("DISCORD_WEBHOOK", "")).strip()
 
 if "discord_user" not in st.session_state:
     st.session_state.discord_user = None
 if "has_vip" not in st.session_state:
     st.session_state.has_vip = False
+if "last_seen_regime" not in st.session_state:
+    st.session_state.last_seen_regime = None
+if "last_seen_alloc" not in st.session_state:
+    st.session_state.last_seen_alloc = None
 
 def discord_login_url():
     params = {
@@ -117,28 +122,17 @@ if not st.session_state.discord_user or not st.session_state.has_vip:
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-def log_usage(username):
-    log_file = "usage_log.json"
-    entry = {"user": username, "time": datetime.now().strftime("%Y-%m-%d %H:%M")}
-    try:
-        if os.path.exists(log_file):
-            with open(log_file, "r") as f:
-                logs = json.load(f)
-        else:
-            logs = []
-        logs.append(entry)
-        logs = logs[-200:]
-        with open(log_file, "w") as f:
-            json.dump(logs, f)
-    except Exception:
-        pass
-
-user = st.session_state.discord_user
-if user:
-    log_usage(user.get("username", "unknown"))
-
+# Live data function — replace the body with your real compute_tpi() + paper book
 @st.cache_data(ttl=180)
 def get_live_data():
+    # TODO: replace this with a real call to compute_tpi() and update_paper_book()
+    dates = pd.date_range(end=datetime.now(), periods=90, freq="D")
+    equity = 10000 * np.cumprod(1 + np.random.normal(0.0004, 0.012, 90))
+    btc = 10000 * np.cumprod(1 + np.random.normal(0.0006, 0.018, 90))
+    eq_df = pd.DataFrame({"date": dates, "equity": equity, "btc_hodl": btc})
+    peak = eq_df["equity"].cummax()
+    eq_df["drawdown"] = (eq_df["equity"] - peak) / peak * 100
+
     return {
         "verdict": "LEAN BUY",
         "regime": "Bullish",
@@ -153,39 +147,36 @@ def get_live_data():
         ],
         "altseason_30": 54, "btc_dom": 59.5, "fng": 69, "eth_btc": 0.0306,
         "ltpi": 0.47, "macro": 0.20, "mtpi": -0.06, "fng_norm": 0.38, "btc_dom_trend": 1.00,
-        "balance": 9817.44, "start_balance": 10000,
+        "balance": float(equity[-1]), "start_balance": 10000,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "equity_curve": [
-            {"date": "2026-09-01", "equity": 10000, "btc_hodl": 10000},
-            {"date": "2026-09-15", "equity": 10240, "btc_hodl": 10180},
-            {"date": "2026-10-01", "equity": 9980, "btc_hodl": 10350},
-            {"date": "2026-10-12", "equity": 9817, "btc_hodl": 10420},
-        ],
+        "equity_df": eq_df,
         "regime_history": [
-            {"date": "2026-09-01", "regime": "Neutral"},
-            {"date": "2026-09-18", "regime": "Bullish"},
-            {"date": "2026-10-05", "regime": "Bullish"},
-            {"date": "2026-10-12", "regime": "Bullish"},
+            {"date": "2026-09-01", "regime": "Neutral", "btc": 45, "eth": 10, "gold": 15, "cash": 25, "alts": 5},
+            {"date": "2026-09-18", "regime": "Bullish", "btc": 50, "eth": 15, "gold": 13, "cash": 16, "alts": 6},
+            {"date": "2026-10-05", "regime": "Bullish", "btc": 50, "eth": 15, "gold": 13, "cash": 16, "alts": 6},
+            {"date": "2026-10-12", "regime": "Bullish", "btc": 50, "eth": 15, "gold": 13, "cash": 16, "alts": 6},
         ],
-        "alert": None,
-        "perf_30d": -1.8,
-        "btc_30d": 4.2,
+        "perf_7d": -0.8, "perf_30d": -1.8, "perf_90d": 2.4,
+        "max_dd": -4.2, "sharpe": 0.65,
     }
 
 data = get_live_data()
 
-if len(data["regime_history"]) >= 2:
-    last = data["regime_history"][-1]["regime"]
-    prev = data["regime_history"][-2]["regime"]
-    if last != prev:
-        data["alert"] = f"Regime changed from {prev} to {last}"
+# What changed banner
+change_notes = []
+if st.session_state.last_seen_regime and st.session_state.last_seen_regime != data["regime"]:
+    change_notes.append(f"Regime moved from {st.session_state.last_seen_regime} to {data['regime']}")
+if st.session_state.last_seen_alloc and st.session_state.last_seen_alloc != (data["btc"], data["alts"]):
+    change_notes.append("Allocation weights shifted")
+if change_notes:
+    st.markdown(f'<div class="alert">⚠️ {" · ".join(change_notes)}</div>', unsafe_allow_html=True)
+st.session_state.last_seen_regime = data["regime"]
+st.session_state.last_seen_alloc = (data["btc"], data["alts"])
 
 def gauge_label(value, kind):
     if kind == "macro":
         return "Risk-On" if value > 0.2 else "Neutral" if value > -0.2 else "Risk-Off"
-    if kind == "ltpi":
-        return "Strong" if value > 0.3 else "Bullish" if value > 0 else "Weak" if value > -0.3 else "Bearish"
-    if kind == "mtpi":
+    if kind in ("ltpi", "mtpi"):
         return "Strong" if value > 0.3 else "Bullish" if value > 0 else "Weak" if value > -0.3 else "Bearish"
     if kind == "fng":
         return "Extreme Greed" if value > 0.6 else "Greed" if value > 0.2 else "Neutral" if value > -0.2 else "Fear" if value > -0.6 else "Extreme Fear"
@@ -219,12 +210,10 @@ def make_gauge(value, title, kind="neutral"):
                       margin=dict(l=6, r=6, t=26, b=0))
     return fig
 
-if data.get("alert"):
-    st.markdown(f'<div class="alert">⚠️ {data["alert"]}</div>', unsafe_allow_html=True)
-
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.markdown('<div class="title">TPI Allocation · This Week</div>', unsafe_allow_html=True)
 st.markdown(f'<div class="subtitle">LEAN BUY · <span class="verdict">{data["regime"]}</span> · {data["rotation"]}</div>', unsafe_allow_html=True)
+user = st.session_state.discord_user
 if user:
     st.caption(f"Logged in as {user.get('username', 'VIP Member')}")
 g1, g2, g3, g4, g5 = st.columns(5)
@@ -245,16 +234,44 @@ with g5:
     st.markdown(f'<div class="gauge-label">{gauge_label(data["btc_dom_trend"], "dom")}</div>', unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
+# Rolling performance
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
-st.subheader("30-Day Performance")
-p1, p2 = st.columns(2)
-with p1:
-    st.markdown(f'<div class="perf-card"><div class="stat-label">TPI Model</div><div class="stat-value">{data["perf_30d"]:+.1f}%</div></div>', unsafe_allow_html=True)
-with p2:
-    st.markdown(f'<div class="perf-card"><div class="stat-label">BTC HODL</div><div class="stat-value">{data["btc_30d"]:+.1f}%</div></div>', unsafe_allow_html=True)
-st.caption("Model vs Bitcoin over the last 30 days")
+st.subheader("Rolling Performance")
+c1, c2, c3, c4, c5 = st.columns(5)
+c1.metric("7-Day", f"{data['perf_7d']:+.1f}%")
+c2.metric("30-Day", f"{data['perf_30d']:+.1f}%")
+c3.metric("90-Day", f"{data['perf_90d']:+.1f}%")
+c4.metric("Max DD", f"{data['max_dd']:.1f}%")
+c5.metric("Sharpe", f"{data['sharpe']:.2f}")
 st.markdown("</div>", unsafe_allow_html=True)
 
+# Equity + drawdown
+st.markdown('<div class="main-card">', unsafe_allow_html=True)
+st.subheader("Equity Curve & Drawdown")
+eq_df = data["equity_df"]
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["equity"], name="TPI Account", line=dict(color="#4ade80", width=2.5)))
+fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["btc_hodl"], name="BTC HODL", line=dict(color="#f7931a", width=2, dash="dot")))
+fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["drawdown"], name="Drawdown %", yaxis="y2",
+                         line=dict(color="#f87171", width=1.5), fill="tozeroy", fillcolor="rgba(248,113,113,0.15)"))
+fig.update_layout(
+    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#e2e8f0"),
+    height=320, margin=dict(l=40, r=40, t=10, b=30),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    yaxis=dict(title="Equity"),
+    yaxis2=dict(title="Drawdown %", overlaying="y", side="right", showgrid=False)
+)
+st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+st.markdown("</div>", unsafe_allow_html=True)
+
+# Regime history with allocation
+st.markdown('<div class="main-card">', unsafe_allow_html=True)
+st.subheader("Regime History & Allocation Snapshots")
+reg_df = pd.DataFrame(data["regime_history"])
+st.dataframe(reg_df, hide_index=True, use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+# Account
 pnl = data["balance"] - data["start_balance"]
 pnl_pct = (pnl / data["start_balance"]) * 100
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
@@ -266,30 +283,7 @@ a3.metric("Total P&L", f"${pnl:,.2f}", f"{pnl_pct:+.2f}%")
 a4.metric("Open Positions", "5")
 st.markdown("</div>", unsafe_allow_html=True)
 
-st.markdown('<div class="main-card">', unsafe_allow_html=True)
-st.subheader("Equity Curve vs BTC HODL")
-eq_df = pd.DataFrame(data["equity_curve"])
-fig_eq = go.Figure()
-fig_eq.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["equity"], name="TPI Account", line=dict(color="#4ade80", width=2.5)))
-fig_eq.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["btc_hodl"], name="BTC HODL", line=dict(color="#f7931a", width=2, dash="dot")))
-fig_eq.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#e2e8f0"),
-                     height=250, margin=dict(l=35, r=15, t=5, b=30),
-                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-st.plotly_chart(fig_eq, use_container_width=True, config={"displayModeBar": False})
-st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown('<div class="main-card">', unsafe_allow_html=True)
-st.subheader("Regime History")
-reg_df = pd.DataFrame(data["regime_history"])
-fig_reg = go.Figure(go.Scatter(x=reg_df["date"], y=[1]*len(reg_df), mode="markers+text",
-                               marker=dict(size=12, color="#4ade80"),
-                               text=reg_df["regime"], textposition="top center"))
-fig_reg.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                      font=dict(color="#e2e8f0"), height=160, margin=dict(l=15, r=15, t=15, b=25),
-                      yaxis=dict(visible=False), showlegend=False)
-st.plotly_chart(fig_reg, use_container_width=True, config={"displayModeBar": False})
-st.markdown("</div>", unsafe_allow_html=True)
-
+# Target mix
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Target Mix")
 assets = ["₿ BTC", "Ξ ETH", "🪙 Gold", "💵 Cash", "✦ Alts"]
@@ -308,81 +302,7 @@ fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", f
 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
-st.markdown('<div class="main-card">', unsafe_allow_html=True)
-st.subheader("Open Positions")
-open_pos = pd.DataFrame({
-    "Asset": ["BTC", "ETH", "Gold", "SOL", "LINK"],
-    "Side": ["Long"]*5,
-    "Size": ["0.058 BTC", "0.59 ETH", "0.31 oz", "1.06 SOL", "0.91 LINK"],
-    "Entry": ["$81,200", "$2,480", "$4,050", "$108", "$14.20"],
-    "Current": ["$83,300", "$2,552", "$4,198", "$111", "$13.32"],
-    "P&L": ["+$122", "+$42", "+$46", "+$3", "-$1"],
-    "Why open": ["Core sleeve", "Core sleeve", "Ballast", "Alt sleeve", "Alt sleeve"],
-})
-st.dataframe(open_pos[["Asset", "Side", "Size", "Entry", "Current", "P&L"]], hide_index=True, use_container_width=True)
-with st.expander("Position details"):
-    st.dataframe(open_pos, hide_index=True, use_container_width=True)
-st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown('<div class="main-card">', unsafe_allow_html=True)
-st.subheader("Closed Trades")
-closed_full = pd.DataFrame({
-    "Date": ["2026-10-08", "2026-10-05", "2026-10-02", "2026-09-28", "2026-09-22", "2026-09-18", "2026-09-12"],
-    "Asset": ["ZEC", "ADA", "HYPE", "BTC", "ETH", "SOL", "GOLD"],
-    "Side": ["Long"]*7,
-    "P&L": ["+$18", "-$4", "+$31", "+$94", "+$27", "+$12", "+$41"],
-    "R": ["+0.6", "-0.2", "+1.1", "+0.8", "+0.7", "+0.4", "+0.9"],
-})
-st.dataframe(closed_full.head(4), hide_index=True, use_container_width=True)
-with st.expander("View full closed trade history"):
-    st.dataframe(closed_full, hide_index=True, use_container_width=True)
-st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown('<div class="main-card">', unsafe_allow_html=True)
-st.subheader("Alt Sleeve")
-cols = st.columns(5)
-for i, a in enumerate(data["alt_breakdown"]):
-    with cols[i]:
-        st.markdown(f'<div style="background:#0f172a; border-radius:12px; padding:0.6rem; text-align:center; border:1px solid #334155;">'
-                    f'<div style="font-weight:700;">{a["coin"]}</div>'
-                    f'<div style="color:#8b5cf6; font-weight:650;">{a["pct"]}%</div>'
-                    f'<div style="font-size:0.68rem; color:#94a3b8;">{a["note"]}</div></div>', unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown('<div class="main-card">', unsafe_allow_html=True)
-st.subheader("Key Market Stats")
-c1, c2, c3, c4, c5 = st.columns(5)
-for col, (lab, val) in zip([c1, c2, c3, c4, c5], [
-    ("Altseason 30d", f"{data['altseason_30']}"),
-    ("BTC Dominance", f"{data['btc_dom']}%"),
-    ("Fear & Greed", f"{data['fng']}"),
-    ("ETH / BTC", f"{data['eth_btc']:.4f}"),
-    ("LTPI", f"{data['ltpi']:.2f}"),
-]):
-    with col:
-        st.markdown(f'<div class="stat-pill"><div class="stat-label">{lab}</div><div class="stat-value">{val}</div></div>', unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
-
 st.caption(f"Last updated {data['timestamp']}  ·  Traders Edge VIP")
 
 if st.button("Refresh data", type="primary"):
     st.rerun()
-
-# Always show the Discord button
-if st.button("Send daily summary to Discord"):
-    if not DISCORD_WEBHOOK or not DISCORD_WEBHOOK.startswith("https://discord.com/api/webhooks/"):
-        st.error("Webhook is missing or invalid. Check the DISCORD_WEBHOOK secret (must be one single line).")
-    else:
-        msg = (
-            f"**TPI Daily** · {data['verdict']} · {data['regime']}\n"
-            f"{data['btc']}% BTC · {data['eth']}% ETH · {data['gold']}% Gold · "
-            f"{data['cash']}% Cash · {data['alts']}% Alts"
-        )
-        try:
-            r = requests.post(DISCORD_WEBHOOK, json={"content": msg}, timeout=10)
-            if r.status_code in (200, 204):
-                st.success("Summary sent to Discord")
-            else:
-                st.error(f"Discord returned {r.status_code}")
-        except Exception as e:
-            st.error(f"Failed to send: {e}")
