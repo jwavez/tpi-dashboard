@@ -148,7 +148,9 @@ if not discord_user:
         f"https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20guilds.members.read"
     )
-    st.link_button("Login with Discord", auth_url, type="primary")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.link_button("Login with Discord", auth_url, type="primary", use_container_width=True)
     st.markdown('<div style="text-align:center; margin-top:0.6rem; font-size:0.7rem; color:#64748b;">VIP & Admin only</div>', unsafe_allow_html=True)
     st.stop()
 
