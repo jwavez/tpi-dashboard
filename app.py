@@ -44,15 +44,14 @@ st.markdown("""
     z-index: -1;
 }
 .login-box { 
-    max-width: 380px; 
-    margin: 28vh auto; 
+    width: 340px; 
+    margin: 32vh auto; 
     text-align: center; 
-    background: rgba(15,23,42,0.75); 
+    background: rgba(15,23,42,0.82); 
     border: 1px solid #475569; 
-    border-radius: 18px; 
-    padding: 2.2rem 1.6rem; 
-    box-shadow: 0 12px 40px rgba(0,0,0,0.55); 
-    backdrop-filter: blur(4px); 
+    border-radius: 16px; 
+    padding: 1.8rem 1.4rem; 
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5); 
 }
 .login-title { font-size: 2rem; font-weight: 700; color: #f8fafc; margin: 0.6rem 0 0.3rem 0; letter-spacing: -0.3px; }
 .login-sub { color: #94a3b8; font-size: 1rem; margin-bottom: 1.8rem; }
@@ -119,16 +118,16 @@ if not discord_user:
         unsafe_allow_html=True,
     )
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
-    st.markdown('<div class="brand-row" style="justify-content:center; margin-bottom:0.2rem;"><span class="brand-text">TRADERS EDGE</span> <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="brand-row" style="justify-content:center; margin-bottom:0.1rem;"><span class="brand-text">TRADERS EDGE</span> <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
     st.markdown('<div class="login-divider"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="login-title">TPI Dashboard</div>', unsafe_allow_html=True)
-    st.markdown('<div class="login-sub">Members-only allocation desk</div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-title" style="font-size:1.4rem;">TPI Dashboard</div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-sub" style="font-size:0.85rem; margin-bottom:1rem;">Members-only allocation desk</div>', unsafe_allow_html=True)
     auth_url = (
         f"https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20guilds.members.read"
     )
     st.link_button("Login with Discord", auth_url, type="primary", use_container_width=True)
-    st.markdown('<div style="margin-top:1.2rem; font-size:0.75rem; color:#64748b;">Access restricted to VIP & Admin roles</div>', unsafe_allow_html=True)
+    st.markdown('<div style="margin-top:0.8rem; font-size:0.7rem; color:#64748b;">VIP & Admin only</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
