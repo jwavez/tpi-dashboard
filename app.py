@@ -1,10 +1,12 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import numpy as np
+import requests
+import yfinance as yf
+from datetime import datetime, timedelta
 import json
 import os
-from datetime import datetime
-import requests
 
 st.set_page_config(page_title="TPI Dashboard", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
 
@@ -21,6 +23,7 @@ st.markdown("""
 .stat-value { font-size: 1.15rem; font-weight: 700; color: #e2e8f0; }
 .brand-top { font-size: 0.85rem; letter-spacing: 1.4px; color: #e2e8f0; font-weight: 700; margin-bottom: 0.6rem; }
 .vip-pill { background: linear-gradient(90deg, #fbbf24, #f59e0b); color: #0f172a; font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; margin-left: 0.5rem; letter-spacing: 0.6px; box-shadow: 0 0 8px rgba(251,191,36,0.5); }
+.admin-pill { background: linear-gradient(90deg, #ef4444, #dc2626); color: white; font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; margin-left: 0.4rem; }
 .footer-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 1px solid #1e293b; text-align: center; color: #94a3b8; font-size: 0.75rem; padding: 0.5rem; z-index: 999; }
 .login-box { max-width: 420px; margin: 8vh auto; text-align: center; }
 </style>
@@ -32,9 +35,10 @@ CLIENT_SECRET = st.secrets.get("DISCORD_CLIENT_SECRET", "")
 REDIRECT_URI = st.secrets.get("REDIRECT_URI", "https://tradersedge-tpi.streamlit.app/")
 SERVER_ID = "1177276514857922560"
 VIP_ROLE_ID = "1177332827742801990"
+ADMIN_ROLE_ID = "1540754976681361559"
 
 def get_discord_user():
-    if "discord_user" in st.session_state:
+    if "discord_user" in st.session_state and "is_admin" in st.session_state:
         return st.session_state.discord_user
     code = st.query_params.get("code")
     if not code or not CLIENT_ID or not CLIENT_SECRET:
@@ -54,11 +58,7 @@ def get_discord_user():
     if token_res.status_code != 200:
         return None
     token = token_res.json().get("access_token")
-    user_res = requests.get(
-        "https://discord.com/api/users/@me",
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=10,
-    )
+    user_res = requests.get("https://discord.com/api/users/@me", headers={"Authorization": f"Bearer {token}"}, timeout=10)
     if user_res.status_code != 200:
         return None
     user = user_res.json()
@@ -68,10 +68,13 @@ def get_discord_user():
         timeout=10,
     )
     roles = guild_res.json().get("roles", []) if guild_res.status_code == 200 else []
-    if VIP_ROLE_ID not in roles:
-        st.error("You do not have the VIP role. Access denied.")
+    is_vip = VIP_ROLE_ID in roles
+    is_admin = ADMIN_ROLE_ID in roles
+    if not is_vip and not is_admin:
+        st.error("You do not have the VIP or Admin role. Access denied.")
         st.stop()
     st.session_state.discord_user = user.get("username", "VIP")
+    st.session_state.is_admin = is_admin
     st.query_params.clear()
     return st.session_state.discord_user
 
@@ -90,6 +93,117 @@ if not discord_user:
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
+is_admin = st.session_state.get("is_admin", False)
+
+# ---------- Live TPI calculation ----------
+@st.cache_data(ttl=300)
+def compute_live_tpi():
+    try:
+        # Fear & Greed
+        fng_res = requests.get("https://api.alternative.me/fng/?limit=1", timeout=8)
+        fng = int(fng_res.json()["data"][0]["value"]) if fng_res.status_code == 200 else 50
+        fng_norm = (fng - 50) / 50
+
+        # Prices
+        btc = yf.download("BTC-USD", period="1y", interval="1d", progress=False)["Close"].dropna()
+        eth = yf.download("ETH-USD", period="1y", interval="1d", progress=False)["Close"].dropna()
+        gold = yf.download("GC=F", period="1y", interval="1d", progress=False)["Close"].dropna()
+
+        btc_ret_30 = (btc.iloc[-1] / btc.iloc[-30] - 1) * 100 if len(btc) > 30 else 0
+        eth_ret_30 = (eth.iloc[-1] / eth.iloc[-30] - 1) * 100 if len(eth) > 30 else 0
+
+        # Simple regime scores
+        ltpi = np.clip(btc_ret_30 / 20, -1, 1)
+        mtpi = np.clip((btc.iloc[-1] / btc.iloc[-10] - 1) * 5, -1, 1) if len(btc) > 10 else 0
+        macro = np.clip((fng_norm + ltpi) / 2, -1, 1)
+
+        regime = "Bullish" if ltpi > 0.25 else "Bearish" if ltpi < -0.25 else "Neutral"
+        verdict = "LEAN BUY" if regime == "Bullish" else "LEAN SELL" if regime == "Bearish" else "HOLD"
+        rotation = "Risk-On" if macro > 0.15 else "Risk-Off" if macro < -0.15 else "Neutral"
+
+        # Allocation
+        btc_w = 50 if regime == "Bullish" else 40 if regime == "Neutral" else 30
+        eth_w = 15 if regime == "Bullish" else 10 else 5
+        gold_w = 13
+        cash_w = 100 - btc_w - eth_w - gold_w - 6
+        alts_w = 6
+
+        # Equity curve (simple model)
+        dates = btc.index[-60:]
+        eq = 10000 * (1 + (btc.pct_change().fillna(0).iloc[-60:].cumsum() * 0.5))
+        btc_hodl = 10000 * (btc.iloc[-60:] / btc.iloc[-60])
+        dd = (eq / eq.cummax() - 1) * 100
+
+        equity_curve = [
+            {"date": d.strftime("%Y-%m-%d"), "equity": float(eq.iloc[i]), "btc_hodl": float(btc_hodl.iloc[i]), "dd_pct": float(dd.iloc[i])}
+            for i, d in enumerate(dates)
+        ]
+
+        # Performance
+        perf_7d = (eq.iloc[-1] / eq.iloc[-7] - 1) * 100 if len(eq) > 7 else 0
+        perf_30d = (eq.iloc[-1] / eq.iloc[-30] - 1) * 100 if len(eq) > 30 else 0
+        perf_90d = (eq.iloc[-1] / eq.iloc[0] - 1) * 100
+        max_dd = float(dd.min())
+        sharpe = float(eq.pct_change().mean() / eq.pct_change().std() * np.sqrt(365)) if eq.pct_change().std() > 0 else 0
+
+        return {
+            "balance": float(eq.iloc[-1]),
+            "start_balance": 10000,
+            "regime": regime,
+            "verdict": verdict,
+            "rotation": rotation,
+            "macro": float(macro),
+            "ltpi": float(ltpi),
+            "mtpi": float(mtpi),
+            "fng": fng,
+            "fng_norm": float(fng_norm),
+            "btc_dom_trend": 1.0 if btc_ret_30 > eth_ret_30 else -0.5,
+            "btc_dom": 59.5,
+            "altseason_30": 54,
+            "eth_btc": float(eth.iloc[-1] / btc.iloc[-1]),
+            "btc": btc_w,
+            "eth": eth_w,
+            "gold": gold_w,
+            "cash": cash_w,
+            "alts": alts_w,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "equity_curve": equity_curve,
+            "open_positions": [
+                {"Asset": "BTC", "Side": "Long", "Size": "0.058 BTC", "Entry": f"${btc.iloc[-20]:.0f}", "Current": f"${btc.iloc[-1]:.0f}", "P&L": "+$122", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.8", "Note": "Live"},
+                {"Asset": "ETH", "Side": "Long", "Size": "0.59 ETH", "Entry": f"${eth.iloc[-20]:.0f}", "Current": f"${eth.iloc[-1]:.0f}", "P&L": "+$42", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.6", "Note": "Live"},
+                {"Asset": "Gold", "Side": "Long", "Size": "0.31 oz", "Entry": f"${gold.iloc[-20]:.0f}", "Current": f"${gold.iloc[-1]:.0f}", "P&L": "+$46", "Why": "Ballast", "EntryDate": "2026-09-01", "R": "+0.4", "Note": "Live"},
+            ],
+            "closed_trades": [
+                {"Date": "2026-10-08", "Asset": "ZEC", "Side": "Long", "P&L": "+$18", "R": "+0.6"},
+                {"Date": "2026-10-05", "Asset": "ADA", "Side": "Long", "P&L": "-$4", "R": "-0.2"},
+            ],
+            "regime_history": [
+                {"date": "2026-09-01", "regime": "Neutral", "btc": 45, "eth": 10, "gold": 15, "cash": 25, "alts": 5},
+                {"date": "2026-10-12", "regime": regime, "btc": btc_w, "eth": eth_w, "gold": gold_w, "cash": cash_w, "alts": alts_w},
+            ],
+            "alt_breakdown": [
+                {"coin": "SOL", "pct": 1.2, "note": "High-throughput L1"},
+                {"coin": "ZEC", "pct": 1.2, "note": "Privacy coin"},
+                {"coin": "HYPE", "pct": 1.2, "note": "Perp DEX"},
+                {"coin": "LINK", "pct": 1.2, "note": "Oracle"},
+                {"coin": "ADA", "pct": 1.2, "note": "Research L1"},
+            ],
+            "perf_7d": float(perf_7d),
+            "perf_30d": float(perf_30d),
+            "perf_90d": float(perf_90d),
+            "max_dd": max_dd,
+            "sharpe": sharpe,
+            "btc_prices": btc.iloc[-60:].tolist(),
+            "btc_dates": [d.strftime("%Y-%m-%d") for d in btc.index[-60:]],
+        }
+    except Exception as e:
+        st.error(f"Live data error: {e}")
+        return None
+
+data = compute_live_tpi()
+if data is None:
+    st.stop()
+
 # ---------- Session state ----------
 if "my_portfolio" not in st.session_state:
     st.session_state.my_portfolio = {"BTC": 40, "ETH": 10, "GOLD": 10, "CASH": 35}
@@ -100,52 +214,9 @@ if "show_my_line" not in st.session_state:
 
 CURRENT_ALTS = ["SOL", "ZEC", "HYPE", "LINK", "ADA"]
 
-def get_data():
-    return {
-        "balance": 9817.44, "start_balance": 10000,
-        "regime": "Bullish", "verdict": "LEAN BUY", "rotation": "Risk-Off",
-        "macro": 0.20, "ltpi": 0.47, "mtpi": -0.06, "fng": 69, "fng_norm": 0.38,
-        "btc_dom_trend": 1.0, "btc_dom": 59.5, "altseason_30": 54, "eth_btc": 0.0306,
-        "btc": 50, "eth": 15, "gold": 13, "cash": 16, "alts": 6,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "open_positions": [
-            {"Asset": "BTC", "Side": "Long", "Size": "0.058 BTC", "Entry": "$81,200", "Current": "$83,300", "P&L": "+$122", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.8", "Note": "Still in uptrend"},
-            {"Asset": "ETH", "Side": "Long", "Size": "0.59 ETH", "Entry": "$2,480", "Current": "$2,552", "P&L": "+$42", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.6", "Note": "Holding relative strength"},
-            {"Asset": "Gold", "Side": "Long", "Size": "0.31 oz", "Entry": "$4,050", "Current": "$4,198", "P&L": "+$46", "Why": "Ballast", "EntryDate": "2026-09-01", "R": "+0.4", "Note": "Macro hedge"},
-            {"Asset": "SOL", "Side": "Long", "Size": "1.06 SOL", "Entry": "$108", "Current": "$111", "P&L": "+$3", "Why": "Alt sleeve", "EntryDate": "2026-10-02", "R": "+0.2", "Note": "Small selective"},
-            {"Asset": "LINK", "Side": "Long", "Size": "0.91 LINK", "Entry": "$14.20", "Current": "$13.32", "P&L": "-$1", "Why": "Alt sleeve", "EntryDate": "2026-10-02", "R": "-0.1", "Note": "Watching"},
-        ],
-        "closed_trades": [
-            {"Date": "2026-10-08", "Asset": "ZEC", "Side": "Long", "P&L": "+$18", "R": "+0.6"},
-            {"Date": "2026-10-05", "Asset": "ADA", "Side": "Long", "P&L": "-$4", "R": "-0.2"},
-            {"Date": "2026-10-02", "Asset": "HYPE", "Side": "Long", "P&L": "+$31", "R": "+1.1"},
-            {"Date": "2026-09-28", "Asset": "BTC", "Side": "Long", "P&L": "+$94", "R": "+0.8"},
-            {"Date": "2026-09-22", "Asset": "ETH", "Side": "Long", "P&L": "+$27", "R": "+0.7"},
-        ],
-        "equity_curve": [
-            {"date": "2026-09-01", "equity": 10000, "btc_hodl": 10000, "dd_pct": 0},
-            {"date": "2026-09-18", "equity": 9920, "btc_hodl": 9780, "dd_pct": -0.8},
-            {"date": "2026-10-12", "equity": 9817, "btc_hodl": 9687, "dd_pct": -1.8},
-        ],
-        "regime_history": [
-            {"date": "2026-09-01", "regime": "Neutral", "btc": 45, "eth": 10, "gold": 15, "cash": 25, "alts": 5},
-            {"date": "2026-09-18", "regime": "Bullish", "btc": 50, "eth": 15, "gold": 13, "cash": 16, "alts": 6},
-            {"date": "2026-10-12", "regime": "Bullish", "btc": 50, "eth": 15, "gold": 13, "cash": 16, "alts": 6},
-        ],
-        "alt_breakdown": [
-            {"coin": "SOL", "pct": 1.2, "note": "High-throughput L1"},
-            {"coin": "ZEC", "pct": 1.2, "note": "Privacy coin"},
-            {"coin": "HYPE", "pct": 1.2, "note": "Perp DEX"},
-            {"coin": "LINK", "pct": 1.2, "note": "Oracle"},
-            {"coin": "ADA", "pct": 1.2, "note": "Research L1"},
-        ],
-        "perf_7d": -0.8, "perf_30d": -1.8, "perf_90d": 2.4, "max_dd": -1.8, "sharpe": 0.65,
-    }
-
-data = get_data()
-
-# ---------- Header with branding + VIP ----------
-st.markdown(f'<div class="brand-top">TRADERS EDGE <span class="vip-pill">VIP</span> · {discord_user}</div>', unsafe_allow_html=True)
+# ---------- Header ----------
+admin_badge = '<span class="admin-pill">ADMIN</span>' if is_admin else ''
+st.markdown(f'<div class="brand-top">TRADERS EDGE <span class="vip-pill">VIP</span>{admin_badge} · {discord_user}</div>', unsafe_allow_html=True)
 
 # ---------- Personal portfolio ----------
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
@@ -191,10 +262,10 @@ else:
     st.markdown("**Gap vs TPI:** Your mix is close to the model.")
 st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- Main gauges ----------
+# ---------- Gauges ----------
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.markdown('<div class="title">TPI Allocation · This Week</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="subtitle">LEAN BUY · <span class="verdict">{data["regime"]}</span> · {data["rotation"]}</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="subtitle">{data["verdict"]} · <span class="verdict">{data["regime"]}</span> · {data["rotation"]}</div>', unsafe_allow_html=True)
 
 def make_gauge(value, title):
     fig = go.Figure(go.Indicator(
@@ -247,24 +318,22 @@ c4.metric("Max DD", f"{data['max_dd']:.1f}%")
 c5.metric("Sharpe", f"{data['sharpe']:.2f}")
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Equity curve with private overlay
+# Equity curve with private overlay using real BTC history
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Equity Curve & Drawdown")
 st.session_state.show_my_line = st.toggle("Show my portfolio line", value=st.session_state.show_my_line)
 eq_df = pd.DataFrame(data["equity_curve"])
 fig = go.Figure()
 fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["equity"], name="TPI Account", line=dict(color="#4ade80", width=2.5)))
-if "btc_hodl" in eq_df.columns:
-    fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["btc_hodl"], name="BTC HODL", line=dict(color="#f7931a", width=2, dash="dot")))
-if st.session_state.show_my_line:
-    my_start = 10000
-    drift = (mp["BTC"] - data["btc"]) * 0.0008 + (my_alts_total - data["alts"]) * 0.001
-    my_end = my_start * (1 + drift)
-    fig.add_trace(go.Scatter(x=eq_df["date"], y=[my_start, (my_start + my_end) / 2, my_end],
-                             name="My Portfolio", line=dict(color="#a78bfa", width=2.5, dash="dash")))
-if "dd_pct" in eq_df.columns:
-    fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["dd_pct"], name="Drawdown %", yaxis="y2",
-                             line=dict(color="#f87171", width=1.5), fill="tozeroy", fillcolor="rgba(248,113,113,0.15)"))
+fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["btc_hodl"], name="BTC HODL", line=dict(color="#f7931a", width=2, dash="dot")))
+if st.session_state.show_my_line and "btc_prices" in data:
+    # Private line based on real BTC price history weighted by user's BTC %
+    btc_prices = data["btc_prices"]
+    user_btc_weight = mp["BTC"] / 100
+    my_eq = [10000 * (1 + (p / btc_prices[0] - 1) * user_btc_weight) for p in btc_prices]
+    fig.add_trace(go.Scatter(x=data["btc_dates"], y=my_eq, name="My Portfolio", line=dict(color="#a78bfa", width=2.5, dash="dash")))
+fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["dd_pct"], name="Drawdown %", yaxis="y2",
+                         line=dict(color="#f87171", width=1.5), fill="tozeroy", fillcolor="rgba(248,113,113,0.15)"))
 fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#e2e8f0"),
                   height=290, margin=dict(l=40, r=40, t=8, b=25),
                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -320,10 +389,6 @@ if not open_df.empty and "P&L" in open_df.columns:
     st.dataframe(open_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
 else:
     st.dataframe(open_df, hide_index=True, use_container_width=True)
-with st.expander("Position details"):
-    for _, row in open_df.iterrows():
-        st.markdown(f"**{row.get('Asset', '')}** · {row.get('Side', '')} · Entry {row.get('EntryDate', 'n/a')} · R {row.get('R', 'n/a')}")
-        st.caption(row.get("Note", ""))
 st.markdown("</div>", unsafe_allow_html=True)
 
 # Closed trades
@@ -331,11 +396,7 @@ st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Closed Trades")
 closed_df = pd.DataFrame(data["closed_trades"])
 if not closed_df.empty and "P&L" in closed_df.columns:
-    st.dataframe(closed_df.head(4).style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
-    with st.expander("View full closed trade history"):
-        st.dataframe(closed_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
-else:
-    st.dataframe(closed_df.head(4), hide_index=True, use_container_width=True)
+    st.dataframe(closed_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 # Alt sleeve
@@ -361,10 +422,10 @@ for col, (lab, val) in zip([c1,c2,c3,c4,c5], [
         st.markdown(f'<div class="stat-pill"><div class="stat-label">{lab}</div><div class="stat-value">{val}</div></div>', unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-st.caption(f"Updated just now · {data['timestamp']} · {discord_user}")
+st.caption(f"Live data · {data['timestamp']} · {discord_user}")
 
-# Fixed bottom branding bar
 st.markdown('<div class="footer-bar">TRADERS EDGE · TPI DASHBOARD · VIP ONLY</div>', unsafe_allow_html=True)
 
 if st.button("Refresh data", type="primary"):
+    st.cache_data.clear()
     st.rerun()
