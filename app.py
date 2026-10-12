@@ -6,7 +6,7 @@ from datetime import datetime
 import urllib.parse
 
 st.set_page_config(
-    page_title="TPI Professional Dashboard",
+    page_title="Traders Edge · TPI",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -15,7 +15,7 @@ st.set_page_config(
 st.markdown("""
 <style>
     .stApp { background-color: #0b1220; color: #e2e8f0; }
-    .block-container { padding-top: 0.7rem; padding-bottom: 1.4rem; max-width: 1320px; }
+    .block-container { padding-top: 0.6rem; padding-bottom: 1.4rem; max-width: 1320px; }
     .main-card {
         background: linear-gradient(145deg, #1e2937 0%, #162033 100%);
         border-radius: 16px;
@@ -23,7 +23,7 @@ st.markdown("""
         border: 1px solid #334155;
         margin-bottom: 0.85rem;
     }
-    .title { font-size: 1.75rem; font-weight: 750; margin: 0 0 0.05rem 0; }
+    .title { font-size: 1.7rem; font-weight: 750; margin: 0.2rem 0 0.05rem 0; }
     .subtitle { font-size: 0.98rem; color: #94a3b8; margin-bottom: 0.45rem; }
     .verdict { color: #4ade80; font-weight: 650; }
     .stat-pill {
@@ -33,10 +33,11 @@ st.markdown("""
     .stat-label { font-size: 0.66rem; color: #94a3b8; text-transform: uppercase; }
     .stat-value { font-size: 1.15rem; font-weight: 700; }
     .alert { background: #422006; border-left: 4px solid #fbbf24; padding: 0.6rem 0.9rem; border-radius: 8px; margin-bottom: 0.7rem; }
+    .logo-header { text-align: center; margin-bottom: 0.4rem; }
 </style>
 """, unsafe_allow_html=True)
 
-# Discord OAuth settings — move these to Streamlit secrets in production
+# Discord OAuth
 DISCORD_CLIENT_ID = st.secrets.get("DISCORD_CLIENT_ID", "1559177904636825690")
 DISCORD_CLIENT_SECRET = st.secrets.get("DISCORD_CLIENT_SECRET", "I0waUTNBVXSEBEmsdorwBavrUD57OmUI")
 DISCORD_SERVER_ID = "1177276514857922560"
@@ -83,7 +84,6 @@ def get_user_and_roles(token):
         roles = member.json().get("roles", [])
     return user, roles
 
-# Handle OAuth callback
 query_params = st.query_params
 if "code" in query_params and not st.session_state.discord_user:
     code = query_params["code"]
@@ -95,20 +95,24 @@ if "code" in query_params and not st.session_state.discord_user:
         st.query_params.clear()
         st.rerun()
 
+# Logo on every page
+st.markdown('<div class="logo-header">', unsafe_allow_html=True)
+st.image("https://i.imgur.com/placeholder.png", width=180)  # replace with your hosted logo URL
+st.markdown("</div>", unsafe_allow_html=True)
+
 # Gate
 if not st.session_state.discord_user or not st.session_state.has_vip:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    st.subheader("VIP Access")
+    st.subheader("Traders Edge · VIP Access")
     if st.session_state.discord_user and not st.session_state.has_vip:
         st.error("You are logged in with Discord but do not have the VIP role.")
     else:
-        st.markdown("Log in with Discord to verify your VIP membership.")
+        st.markdown("Log in with Discord to verify your VIP membership and open the live TPI dashboard.")
     st.link_button("Login with Discord", discord_login_url())
     st.caption("Access is granted only if you hold the VIP role in the Traders Edge server.")
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# Rest of dashboard (same as before, with Discord name shown)
 @st.cache_data(ttl=180)
 def get_live_data():
     return {
@@ -187,8 +191,6 @@ with g4: st.plotly_chart(make_gauge(data["fng_norm"], f"Fear & Greed {data['fng'
 with g5: st.plotly_chart(make_gauge(data["btc_dom_trend"], "BTC Dom Trend", "dom"), use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Account, equity, regime, mix, positions, closed trades, alts, stats
-# (same structure as previous version)
 pnl = data["balance"] - data["start_balance"]
 pnl_pct = (pnl / data["start_balance"]) * 100
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
@@ -297,7 +299,7 @@ for col, (lab, val) in zip([c1, c2, c3, c4, c5], [
         st.markdown(f'<div class="stat-pill"><div class="stat-label">{lab}</div><div class="stat-value">{val}</div></div>', unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-st.caption(f"Last updated {data['timestamp']}  ·  Discord VIP login active")
+st.caption(f"Last updated {data['timestamp']}  ·  Traders Edge VIP")
 
 if st.button("Refresh data", type="primary"):
     st.rerun()
