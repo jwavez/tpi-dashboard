@@ -40,10 +40,20 @@ st.markdown("""
 .login-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.45);
+    background: rgba(0,0,0,0.25);
     z-index: -1;
 }
-.login-box { max-width: 480px; margin: 22vh auto; text-align: center; background: rgba(15,23,42,0.88); border: 1px solid #334155; border-radius: 24px; padding: 3rem 2.2rem; box-shadow: 0 20px 60px rgba(0,0,0,0.6); backdrop-filter: blur(6px); }
+.login-box { 
+    max-width: 380px; 
+    margin: 28vh auto; 
+    text-align: center; 
+    background: rgba(15,23,42,0.75); 
+    border: 1px solid #475569; 
+    border-radius: 18px; 
+    padding: 2.2rem 1.6rem; 
+    box-shadow: 0 12px 40px rgba(0,0,0,0.55); 
+    backdrop-filter: blur(4px); 
+}
 .login-title { font-size: 2rem; font-weight: 700; color: #f8fafc; margin: 0.6rem 0 0.3rem 0; letter-spacing: -0.3px; }
 .login-sub { color: #94a3b8; font-size: 1rem; margin-bottom: 1.8rem; }
 .login-divider { height: 1px; background: #1e293b; margin: 1.2rem 0; }
