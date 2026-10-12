@@ -21,9 +21,11 @@ st.markdown("""
 .stat-pill { background: #1e293b; border-radius: 12px; padding: 0.6rem; text-align: center; }
 .stat-label { font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; }
 .stat-value { font-size: 1.15rem; font-weight: 700; color: #e2e8f0; }
-.brand-top { font-size: 0.85rem; letter-spacing: 1.4px; color: #e2e8f0; font-weight: 700; margin-bottom: 0.6rem; }
-.vip-pill { background: linear-gradient(90deg, #fbbf24, #f59e0b); color: #0f172a; font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; margin-left: 0.5rem; letter-spacing: 0.6px; box-shadow: 0 0 8px rgba(251,191,36,0.5); }
-.admin-pill { background: linear-gradient(90deg, #ef4444, #dc2626); color: white; font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; margin-left: 0.4rem; }
+.brand-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem; }
+.brand-logo { height: 28px; width: auto; }
+.brand-text { font-size: 0.9rem; letter-spacing: 1.4px; color: #e2e8f0; font-weight: 700; }
+.vip-pill { background: linear-gradient(90deg, #fbbf24, #f59e0b); color: #0f172a; font-size: 0.75rem; font-weight: 800; padding: 0.22rem 0.65rem; border-radius: 999px; letter-spacing: 0.6px; box-shadow: 0 0 8px rgba(251,191,36,0.5); }
+.admin-pill { background: linear-gradient(90deg, #ef4444, #dc2626); color: white; font-size: 0.75rem; font-weight: 800; padding: 0.22rem 0.65rem; border-radius: 999px; }
 .footer-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 1px solid #1e293b; text-align: center; color: #94a3b8; font-size: 0.75rem; padding: 0.5rem; z-index: 999; }
 .login-box { max-width: 420px; margin: 8vh auto; text-align: center; }
 </style>
@@ -82,7 +84,7 @@ discord_user = get_discord_user()
 
 if not discord_user:
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
-    st.markdown('<div class="brand-top">TRADERS EDGE <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="brand-row"><span class="brand-text">TRADERS EDGE</span> <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
     st.subheader("TPI Dashboard")
     st.write("Login with Discord to access the VIP dashboard.")
     auth_url = (
@@ -228,9 +230,21 @@ if "show_my_line" not in st.session_state:
 
 CURRENT_ALTS = ["SOL", "ZEC", "HYPE", "LINK", "ADA"]
 
-# ---------- Header ----------
-admin_badge = '<span class="admin-pill">ADMIN</span>' if is_admin else ''
-st.markdown(f'<div class="brand-top">TRADERS EDGE <span class="vip-pill">VIP</span>{admin_badge} · {discord_user}</div>', unsafe_allow_html=True)
+# ---------- Header with logo + VIP/ADMIN ----------
+logo_html = ""
+if os.path.exists("logolight.png"):
+    logo_html = '<img src="logolight.png" class="brand-logo" alt="Traders Edge">'
+else:
+    logo_html = '<span class="brand-text">TE</span>'
+
+role_pills = '<span class="vip-pill">VIP</span>'
+if is_admin:
+    role_pills += ' <span class="admin-pill">ADMIN</span>'
+
+st.markdown(
+    f'<div class="brand-row">{logo_html}<span class="brand-text">TRADERS EDGE</span>{role_pills}<span style="color:#94a3b8; margin-left:0.5rem;">· {discord_user}</span></div>',
+    unsafe_allow_html=True,
+)
 
 # ---------- Personal portfolio ----------
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
