@@ -312,13 +312,18 @@ st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Closed Trades")
 closed_df = pd.DataFrame(data["closed_trades"])
 if not closed_df.empty and "P&L" in closed_df.columns:
-    styled_c = closed_df.style.map(
-        lambda x: "color: #22c55e" if str(x).startswith("+") else "color: #ef4444" if str(x).startswith("-") else "",
-        subset=["P&L"]
-    )
-    st.dataframe(styled_c.head(4), hide_index=True, use_container_width=True)
+    def color_pnl(val):
+        s = str(val)
+        if s.startswith("+"):
+            return "color: #22c55e"
+        if s.startswith("-"):
+            return "color: #ef4444"
+        return ""
+    styled_preview = closed_df.head(4).style.map(color_pnl, subset=["P&L"])
+    st.dataframe(styled_preview, hide_index=True, use_container_width=True)
     with st.expander("View full closed trade history"):
-        st.dataframe(styled_c, hide_index=True, use_container_width=True)
+        styled_full = closed_df.style.map(color_pnl, subset=["P&L"])
+        st.dataframe(styled_full, hide_index=True, use_container_width=True)
 else:
     st.dataframe(closed_df.head(4), hide_index=True, use_container_width=True)
     with st.expander("View full closed trade history"):
