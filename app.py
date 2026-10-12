@@ -227,20 +227,29 @@ st.markdown("</div>", unsafe_allow_html=True)
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Equity Curve & Drawdown")
 eq_df = pd.DataFrame(data["equity_curve"])
-if "timestamp" in eq_df.columns:
-    eq_df["date"] = eq_df["timestamp"]
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["equity"], name="TPI Account", line=dict(color="#4ade80", width=2.5)))
-if "btc_hodl" in eq_df.columns:
-    fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["btc_hodl"], name="BTC HODL", line=dict(color="#f7931a", width=2, dash="dot")))
-if "dd_pct" in eq_df.columns:
-    fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["dd_pct"], name="Drawdown %", yaxis="y2",
-                             line=dict(color="#f87171", width=1.5), fill="tozeroy", fillcolor="rgba(248,113,113,0.15)"))
-fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#e2e8f0"),
-                  height=290, margin=dict(l=40, r=40, t=8, b=25),
-                  legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                  yaxis=dict(title="Equity"), yaxis2=dict(title="DD %", overlaying="y", side="right", showgrid=False))
-st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+if eq_df.empty:
+    st.info("No equity data yet.")
+else:
+    # Normalize date column
+    if "date" not in eq_df.columns:
+        if "timestamp" in eq_df.columns:
+            eq_df["date"] = eq_df["timestamp"]
+        else:
+            eq_df["date"] = range(len(eq_df))
+    if "equity" not in eq_df.columns:
+        eq_df["equity"] = data.get("balance", 10000)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["equity"], name="TPI Account", line=dict(color="#4ade80", width=2.5)))
+    if "btc_hodl" in eq_df.columns:
+        fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["btc_hodl"], name="BTC HODL", line=dict(color="#f7931a", width=2, dash="dot")))
+    if "dd_pct" in eq_df.columns:
+        fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["dd_pct"], name="Drawdown %", yaxis="y2",
+                                 line=dict(color="#f87171", width=1.5), fill="tozeroy", fillcolor="rgba(248,113,113,0.15)"))
+    fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#e2e8f0"),
+                      height=290, margin=dict(l=40, r=40, t=8, b=25),
+                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                      yaxis=dict(title="Equity"), yaxis2=dict(title="DD %", overlaying="y", side="right", showgrid=False))
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
