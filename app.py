@@ -27,7 +27,20 @@ st.markdown("""
 .vip-pill { background: linear-gradient(90deg, #fbbf24, #f59e0b); color: #0f172a; font-size: 0.75rem; font-weight: 800; padding: 0.22rem 0.65rem; border-radius: 999px; letter-spacing: 0.6px; box-shadow: 0 0 8px rgba(251,191,36,0.5); }
 .admin-pill { background: linear-gradient(90deg, #ef4444, #dc2626); color: white; font-size: 0.75rem; font-weight: 800; padding: 0.22rem 0.65rem; border-radius: 999px; }
 .footer-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 1px solid #1e293b; text-align: center; color: #94a3b8; font-size: 0.75rem; padding: 0.5rem; z-index: 999; }
-.login-box { max-width: 480px; margin: 22vh auto; text-align: center; background: linear-gradient(180deg, #111827 0%, #0f172a 100%); border: 1px solid #334155; border-radius: 24px; padding: 3rem 2.2rem; box-shadow: 0 20px 60px rgba(0,0,0,0.55); }
+.stApp { background: #0b1220; }
+.login-bg {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #0b1220 url('login_bg.jpg') center center / cover no-repeat;
+    z-index: -1;
+}
+.login-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: -1;
+}
+.login-box { max-width: 480px; margin: 22vh auto; text-align: center; background: rgba(15,23,42,0.88); border: 1px solid #334155; border-radius: 24px; padding: 3rem 2.2rem; box-shadow: 0 20px 60px rgba(0,0,0,0.6); backdrop-filter: blur(6px); }
 .login-title { font-size: 2rem; font-weight: 700; color: #f8fafc; margin: 0.6rem 0 0.3rem 0; letter-spacing: -0.3px; }
 .login-sub { color: #94a3b8; font-size: 1rem; margin-bottom: 1.8rem; }
 .login-divider { height: 1px; background: #1e293b; margin: 1.2rem 0; }
@@ -86,6 +99,7 @@ def get_discord_user():
 discord_user = get_discord_user()
 
 if not discord_user:
+    st.markdown('<div class="login-bg"></div><div class="login-overlay"></div>', unsafe_allow_html=True)
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
     st.markdown('<div class="brand-row" style="justify-content:center; margin-bottom:0.2rem;"><span class="brand-text">TRADERS EDGE</span> <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
     st.markdown('<div class="login-divider"></div>', unsafe_allow_html=True)
