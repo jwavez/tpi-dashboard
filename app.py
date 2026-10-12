@@ -27,7 +27,9 @@ st.markdown("""
 .vip-pill { background: linear-gradient(90deg, #fbbf24, #f59e0b); color: #0f172a; font-size: 0.75rem; font-weight: 800; padding: 0.22rem 0.65rem; border-radius: 999px; letter-spacing: 0.6px; box-shadow: 0 0 8px rgba(251,191,36,0.5); }
 .admin-pill { background: linear-gradient(90deg, #ef4444, #dc2626); color: white; font-size: 0.75rem; font-weight: 800; padding: 0.22rem 0.65rem; border-radius: 999px; }
 .footer-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 1px solid #1e293b; text-align: center; color: #94a3b8; font-size: 0.75rem; padding: 0.5rem; z-index: 999; }
-.login-box { max-width: 420px; margin: 8vh auto; text-align: center; }
+.login-box { max-width: 440px; margin: 18vh auto; text-align: center; background: #0f172a; border: 1px solid #1e293b; border-radius: 20px; padding: 2.5rem 2rem; box-shadow: 0 10px 40px rgba(0,0,0,0.4); }
+.login-title { font-size: 1.8rem; font-weight: 700; color: #e2e8f0; margin: 0.4rem 0 0.2rem 0; }
+.login-sub { color: #94a3b8; font-size: 0.95rem; margin-bottom: 1.4rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -84,14 +86,14 @@ discord_user = get_discord_user()
 
 if not discord_user:
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
-    st.markdown('<div class="brand-row"><span class="brand-text">TRADERS EDGE</span> <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
-    st.subheader("TPI Dashboard")
-    st.write("Login with Discord to access the VIP dashboard.")
+    st.markdown('<div class="brand-row" style="justify-content:center;"><span class="brand-text">TRADERS EDGE</span> <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-title">TPI Dashboard</div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-sub">Members-only allocation desk</div>', unsafe_allow_html=True)
     auth_url = (
         f"https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20guilds.members.read"
     )
-    st.link_button("Login with Discord", auth_url, type="primary")
+    st.link_button("Login with Discord", auth_url, type="primary", use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
@@ -138,10 +140,12 @@ def compute_live_tpi():
         cash_w = 100 - btc_w - eth_w - gold_w - 6
         alts_w = 6
 
-        # Equity curve (simple model) — force numeric Series
+        # Equity curve scaled so the last point matches the paper balance
         dates = btc.index[-60:]
         btc_slice = btc.iloc[-60:].astype(float)
-        eq = 10000 * (1 + (btc_slice.pct_change().fillna(0).cumsum() * 0.5))
+        raw_eq = 10000 * (1 + (btc_slice.pct_change().fillna(0).cumsum() * 0.5))
+        scale = 9817.44 / float(raw_eq.iloc[-1]) if float(raw_eq.iloc[-1]) != 0 else 1.0
+        eq = raw_eq * scale
         btc_hodl = 10000 * (btc_slice / btc_slice.iloc[0])
         dd = (eq / eq.cummax() - 1) * 100
 
@@ -230,7 +234,7 @@ if "show_my_line" not in st.session_state:
 
 CURRENT_ALTS = ["SOL", "ZEC", "HYPE", "LINK", "ADA"]
 
-# ---------- Header with logo + VIP/ADMIN ----------
+# ---------- Header under Streamlit bar ----------
 logo_html = ""
 if os.path.exists("logolight.png"):
     logo_html = '<img src="logolight.png" class="brand-logo" alt="Traders Edge">'
@@ -241,6 +245,7 @@ role_pills = '<span class="vip-pill">VIP</span>'
 if is_admin:
     role_pills += ' <span class="admin-pill">ADMIN</span>'
 
+st.markdown("<div style='height: 0.4rem;'></div>", unsafe_allow_html=True)
 st.markdown(
     f'<div class="brand-row">{logo_html}<span class="brand-text">TRADERS EDGE</span>{role_pills}<span style="color:#94a3b8; margin-left:0.5rem;">· {discord_user}</span></div>',
     unsafe_allow_html=True,
