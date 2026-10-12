@@ -9,7 +9,7 @@ st.set_page_config(page_title="TPI Dashboard", page_icon="📈", layout="wide", 
 
 st.markdown("""
 <style>
-.block-container { padding-top: 0.8rem; }
+.block-container { padding-top: 0.6rem; padding-bottom: 3.2rem; }
 .main-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 16px; padding: 1.2rem; margin-bottom: 1rem; }
 .title { font-size: 1.6rem; font-weight: 700; color: #e2e8f0; }
 .subtitle { color: #94a3b8; font-size: 0.95rem; margin-bottom: 0.8rem; }
@@ -18,19 +18,22 @@ st.markdown("""
 .stat-pill { background: #1e293b; border-radius: 12px; padding: 0.6rem; text-align: center; }
 .stat-label { font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; }
 .stat-value { font-size: 1.15rem; font-weight: 700; color: #e2e8f0; }
-.banner { background: #1e3a5f; border-left: 4px solid #60a5fa; padding: 0.6rem 1rem; border-radius: 8px; margin-bottom: 1rem; color: #e2e8f0; }
-.brand { font-size: 0.7rem; letter-spacing: 1px; color: #64748b; text-align: right; margin-top: -0.4rem; }
-.footer { text-align: center; color: #64748b; font-size: 0.75rem; margin-top: 1.5rem; padding: 0.4rem; border-top: 1px solid #1e293b; }
+.brand-top { font-size: 0.72rem; letter-spacing: 1.2px; color: #94a3b8; font-weight: 650; margin-bottom: 0.4rem; }
+.vip-pill { background: linear-gradient(90deg, #fbbf24, #f59e0b); color: #0f172a; font-size: 0.65rem; font-weight: 750; padding: 0.15rem 0.5rem; border-radius: 999px; margin-left: 0.4rem; letter-spacing: 0.5px; }
+.footer-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 1px solid #1e293b; text-align: center; color: #64748b; font-size: 0.72rem; padding: 0.45rem; z-index: 999; }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- Session state for private portfolio ----------
+# ---------- Session state ----------
 if "my_portfolio" not in st.session_state:
-    st.session_state.my_portfolio = {"BTC": 40, "ETH": 10, "GOLD": 10, "CASH": 35, "ALTS": 5}
+    st.session_state.my_portfolio = {"BTC": 40, "ETH": 10, "GOLD": 10, "CASH": 35}
+if "my_alts" not in st.session_state:
+    st.session_state.my_alts = {"SOL": 1.2, "ZEC": 0, "HYPE": 1.2, "LINK": 0, "ADA": 1.2}
 if "show_my_line" not in st.session_state:
     st.session_state.show_my_line = True
 
-# ---------- Data ----------
+CURRENT_ALTS = ["SOL", "ZEC", "HYPE", "LINK", "ADA"]
+
 def get_data():
     return {
         "balance": 9817.44, "start_balance": 10000,
@@ -71,33 +74,46 @@ def get_data():
             {"coin": "ADA", "pct": 1.2, "note": "Research L1"},
         ],
         "perf_7d": -0.8, "perf_30d": -1.8, "perf_90d": 2.4, "max_dd": -1.8, "sharpe": 0.65,
+        "discord_user": "Trader",  # replace with real Discord name when OAuth is wired
     }
 
 data = get_data()
 
-# ---------- Branding header ----------
-st.markdown('<div class="brand">TRADERS EDGE · TPI</div>', unsafe_allow_html=True)
+# ---------- Header with branding + VIP ----------
+st.markdown(f'<div class="brand-top">TRADERS EDGE <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
 
-# ---------- Personal portfolio section ----------
+# ---------- Personal portfolio ----------
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Your Portfolio vs TPI")
 with st.expander("Edit my holdings", expanded=False):
-    c1, c2, c3, c4, c5 = st.columns(5)
+    c1, c2, c3, c4 = st.columns(4)
     st.session_state.my_portfolio["BTC"] = c1.number_input("BTC %", 0, 100, st.session_state.my_portfolio["BTC"], key="btc_in")
     st.session_state.my_portfolio["ETH"] = c2.number_input("ETH %", 0, 100, st.session_state.my_portfolio["ETH"], key="eth_in")
     st.session_state.my_portfolio["GOLD"] = c3.number_input("Gold %", 0, 100, st.session_state.my_portfolio["GOLD"], key="gold_in")
     st.session_state.my_portfolio["CASH"] = c4.number_input("Cash %", 0, 100, st.session_state.my_portfolio["CASH"], key="cash_in")
-    st.session_state.my_portfolio["ALTS"] = c5.number_input("Alts %", 0, 100, st.session_state.my_portfolio["ALTS"], key="alts_in")
+
+    st.markdown("**Alt sleeve** (only current names)")
+    selected = st.multiselect("Select alts", CURRENT_ALTS, default=[k for k, v in st.session_state.my_alts.items() if v > 0])
+    alt_cols = st.columns(len(CURRENT_ALTS))
+    for i, coin in enumerate(CURRENT_ALTS):
+        with alt_cols[i]:
+            if coin in selected:
+                st.session_state.my_alts[coin] = st.number_input(f"{coin} %", 0.0, 10.0, float(st.session_state.my_alts.get(coin, 1.2)), step=0.1, key=f"alt_{coin}")
+            else:
+                st.session_state.my_alts[coin] = 0.0
+                st.caption(f"{coin} off")
+
     if st.button("Save my portfolio"):
         st.success("Saved for this session.")
 
 mp = st.session_state.my_portfolio
+my_alts_total = sum(st.session_state.my_alts.values())
 gaps = {
     "BTC": mp["BTC"] - data["btc"],
     "ETH": mp["ETH"] - data["eth"],
     "GOLD": mp["GOLD"] - data["gold"],
     "CASH": mp["CASH"] - data["cash"],
-    "ALTS": mp["ALTS"] - data["alts"],
+    "ALTS": my_alts_total - data["alts"],
 }
 gap_lines = []
 for k, v in gaps.items():
@@ -115,7 +131,7 @@ st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.markdown('<div class="title">TPI Allocation · This Week</div>', unsafe_allow_html=True)
 st.markdown(f'<div class="subtitle">LEAN BUY · <span class="verdict">{data["regime"]}</span> · {data["rotation"]}</div>', unsafe_allow_html=True)
 
-def make_gauge(value, title, kind):
+def make_gauge(value, title):
     fig = go.Figure(go.Indicator(
         mode="gauge+number", value=value,
         title={"text": title, "font": {"size": 12, "color": "#94a3b8"}},
@@ -151,7 +167,7 @@ for col, (val, title, kind) in zip(gcols, [
     (data["btc_dom_trend"], "BTC Dom Trend", "dom"),
 ]):
     with col:
-        st.plotly_chart(make_gauge(val, title, kind), use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(make_gauge(val, title), use_container_width=True, config={"displayModeBar": False})
         st.markdown(f'<div class="gauge-label">{gauge_label(val, kind)}</div>', unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -176,9 +192,9 @@ fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["equity"], name="TPI Account",
 if "btc_hodl" in eq_df.columns:
     fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["btc_hodl"], name="BTC HODL", line=dict(color="#f7931a", width=2, dash="dot")))
 if st.session_state.show_my_line:
-    # Simple private line scaled from start
     my_start = 10000
-    my_end = my_start * (1 + (mp["BTC"] - data["btc"]) * 0.001)  # rough private drift
+    drift = (mp["BTC"] - data["btc"]) * 0.0008 + (my_alts_total - data["alts"]) * 0.001
+    my_end = my_start * (1 + drift)
     fig.add_trace(go.Scatter(x=eq_df["date"], y=[my_start, (my_start + my_end) / 2, my_end],
                              name="My Portfolio", line=dict(color="#a78bfa", width=2.5, dash="dash")))
 if "dd_pct" in eq_df.columns:
@@ -280,8 +296,10 @@ for col, (lab, val) in zip([c1,c2,c3,c4,c5], [
         st.markdown(f'<div class="stat-pill"><div class="stat-label">{lab}</div><div class="stat-value">{val}</div></div>', unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-st.caption(f"Updated just now · {data['timestamp']} · Traders Edge VIP")
-st.markdown('<div class="footer">TRADERS EDGE · TPI DASHBOARD</div>', unsafe_allow_html=True)
+st.caption(f"Updated just now · {data['timestamp']} · {data['discord_user']}")
+
+# Fixed bottom branding bar
+st.markdown('<div class="footer-bar">TRADERS EDGE · TPI DASHBOARD · VIP</div>', unsafe_allow_html=True)
 
 if st.button("Refresh data", type="primary"):
     st.rerun()
