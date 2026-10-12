@@ -1,7 +1,9 @@
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
+import requests
 from datetime import datetime
+import urllib.parse
 
 st.set_page_config(
     page_title="TPI Professional Dashboard",
@@ -34,36 +36,81 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Multi-key VIP gate (add/remove keys here)
-VALID_KEYS = {
-    "TE-VIP-001": "Member A",
-    "TE-VIP-002": "Member B",
-    "TE-VIP-003": "Member C",
-    # Add more keys as needed. Remove a key to revoke access.
-}
+# Discord OAuth settings — move these to Streamlit secrets in production
+DISCORD_CLIENT_ID = st.secrets.get("DISCORD_CLIENT_ID", "1559177904636825690")
+DISCORD_CLIENT_SECRET = st.secrets.get("DISCORD_CLIENT_SECRET", "I0waUTNBVXSEBEmsdorwBavrUD57OmUI")
+DISCORD_SERVER_ID = "1177276514857922560"
+VIP_ROLE_ID = "1177332827742801990"
+REDIRECT_URI = st.secrets.get("REDIRECT_URI", "http://localhost:8501/")
 
-if "vip_ok" not in st.session_state:
-    st.session_state.vip_ok = False
-    st.session_state.member_name = ""
+if "discord_user" not in st.session_state:
+    st.session_state.discord_user = None
+if "has_vip" not in st.session_state:
+    st.session_state.has_vip = False
 
-if not st.session_state.vip_ok:
+def discord_login_url():
+    params = {
+        "client_id": DISCORD_CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "response_type": "code",
+        "scope": "identify guilds.members.read",
+    }
+    return "https://discord.com/api/oauth2/authorize?" + urllib.parse.urlencode(params)
+
+def exchange_code(code):
+    data = {
+        "client_id": DISCORD_CLIENT_ID,
+        "client_secret": DISCORD_CLIENT_SECRET,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": REDIRECT_URI,
+    }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    r = requests.post("https://discord.com/api/oauth2/token", data=data, headers=headers)
+    if r.status_code != 200:
+        return None
+    return r.json().get("access_token")
+
+def get_user_and_roles(token):
+    headers = {"Authorization": f"Bearer {token}"}
+    user = requests.get("https://discord.com/api/users/@me", headers=headers).json()
+    member = requests.get(
+        f"https://discord.com/api/users/@me/guilds/{DISCORD_SERVER_ID}/member",
+        headers=headers,
+    )
+    roles = []
+    if member.status_code == 200:
+        roles = member.json().get("roles", [])
+    return user, roles
+
+# Handle OAuth callback
+query_params = st.query_params
+if "code" in query_params and not st.session_state.discord_user:
+    code = query_params["code"]
+    token = exchange_code(code)
+    if token:
+        user, roles = get_user_and_roles(token)
+        st.session_state.discord_user = user
+        st.session_state.has_vip = VIP_ROLE_ID in roles
+        st.query_params.clear()
+        st.rerun()
+
+# Gate
+if not st.session_state.discord_user or not st.session_state.has_vip:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
     st.subheader("VIP Access")
-    key = st.text_input("Enter your personal VIP key", type="password")
-    if st.button("Unlock Dashboard"):
-        if key in VALID_KEYS:
-            st.session_state.vip_ok = True
-            st.session_state.member_name = VALID_KEYS[key]
-            st.rerun()
-        else:
-            st.error("Invalid or expired key")
-    st.caption("Each member receives a unique key. Keys can be revoked at any time.")
+    if st.session_state.discord_user and not st.session_state.has_vip:
+        st.error("You are logged in with Discord but do not have the VIP role.")
+    else:
+        st.markdown("Log in with Discord to verify your VIP membership.")
+    st.link_button("Login with Discord", discord_login_url())
+    st.caption("Access is granted only if you hold the VIP role in the Traders Edge server.")
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
+# Rest of dashboard (same as before, with Discord name shown)
 @st.cache_data(ttl=180)
 def get_live_data():
-    # Replace this return with a call to your compute_tpi() + update_paper_book()
     return {
         "verdict": "LEAN BUY",
         "regime": "Bullish",
@@ -123,16 +170,15 @@ def make_gauge(value, title, color_mode="neutral"):
                       margin=dict(l=8, r=8, t=28, b=0))
     return fig
 
-# Alert
 if data.get("alert"):
     st.markdown(f'<div class="alert">⚠️ {data["alert"]}</div>', unsafe_allow_html=True)
 
-# Header
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.markdown('<div class="title">TPI Allocation · This Week</div>', unsafe_allow_html=True)
 st.markdown(f'<div class="subtitle">LEAN BUY · <span class="verdict">{data["regime"]}</span> · {data["rotation"]}</div>', unsafe_allow_html=True)
-if st.session_state.member_name:
-    st.caption(f"Logged in as {st.session_state.member_name}")
+user = st.session_state.discord_user
+if user:
+    st.caption(f"Logged in as {user.get('username', 'VIP Member')}")
 g1, g2, g3, g4, g5 = st.columns(5)
 with g1: st.plotly_chart(make_gauge(data["macro"], "Macro"), use_container_width=True, config={"displayModeBar": False})
 with g2: st.plotly_chart(make_gauge(data["ltpi"], "LTPI Long-Term"), use_container_width=True, config={"displayModeBar": False})
@@ -141,7 +187,8 @@ with g4: st.plotly_chart(make_gauge(data["fng_norm"], f"Fear & Greed {data['fng'
 with g5: st.plotly_chart(make_gauge(data["btc_dom_trend"], "BTC Dom Trend", "dom"), use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Account
+# Account, equity, regime, mix, positions, closed trades, alts, stats
+# (same structure as previous version)
 pnl = data["balance"] - data["start_balance"]
 pnl_pct = (pnl / data["start_balance"]) * 100
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
@@ -153,7 +200,6 @@ a3.metric("Total P&L", f"${pnl:,.2f}", f"{pnl_pct:+.2f}%")
 a4.metric("Open Positions", "5")
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Equity curve
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Equity Curve vs BTC HODL")
 eq_df = pd.DataFrame(data["equity_curve"])
@@ -166,7 +212,6 @@ fig_eq.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
 st.plotly_chart(fig_eq, use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Regime history
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Regime History")
 reg_df = pd.DataFrame(data["regime_history"])
@@ -179,7 +224,6 @@ fig_reg.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)
 st.plotly_chart(fig_reg, use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Target mix
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Target Mix")
 assets = ["₿ BTC", "Ξ ETH", "🪙 Gold", "💵 Cash", "✦ Alts"]
@@ -198,7 +242,6 @@ fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", f
 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Open positions
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Open Positions")
 open_pos = pd.DataFrame({
@@ -215,7 +258,6 @@ with st.expander("Position details"):
     st.dataframe(open_pos, hide_index=True, use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Closed trades
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Closed Trades")
 closed_full = pd.DataFrame({
@@ -230,7 +272,6 @@ with st.expander("View full closed trade history"):
     st.dataframe(closed_full, hide_index=True, use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Alt sleeve + stats
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Alt Sleeve")
 cols = st.columns(5)
@@ -256,7 +297,7 @@ for col, (lab, val) in zip([c1, c2, c3, c4, c5], [
         st.markdown(f'<div class="stat-pill"><div class="stat-label">{lab}</div><div class="stat-value">{val}</div></div>', unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-st.caption(f"Last updated {data['timestamp']}  ·  Unique key access")
+st.caption(f"Last updated {data['timestamp']}  ·  Discord VIP login active")
 
 if st.button("Refresh data", type="primary"):
     st.rerun()
