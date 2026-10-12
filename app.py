@@ -102,15 +102,12 @@ def get_discord_user():
 discord_user = get_discord_user()
 
 if not discord_user:
-    # Login background — try local file first
-    bg_html = ""
-    for fname in ["login_bg.jpg", "login_bg.png", "login_bg.jpeg"]:
-        if os.path.exists(fname):
-            bg_html = f'<div class="login-bg" style="background-image: url(\'{fname}\');"></div><div class="login-overlay"></div>'
-            break
-    if not bg_html:
-        bg_html = '<div class="login-overlay"></div>'
-    st.markdown(bg_html, unsafe_allow_html=True)
+    # Login background — use public GitHub raw URL (Streamlit Cloud does not serve local files for CSS)
+    bg_url = "https://raw.githubusercontent.com/jwavez/tpi-dashboard/main/login_bg.jpg"
+    st.markdown(
+        f'<div class="login-bg" style="background-image: url(\'{bg_url}\');"></div><div class="login-overlay"></div>',
+        unsafe_allow_html=True,
+    )
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
     st.markdown('<div class="brand-row" style="justify-content:center; margin-bottom:0.2rem;"><span class="brand-text">TRADERS EDGE</span> <span class="vip-pill">VIP</span></div>', unsafe_allow_html=True)
     st.markdown('<div class="login-divider"></div>', unsafe_allow_html=True)
