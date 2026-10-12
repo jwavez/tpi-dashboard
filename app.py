@@ -24,6 +24,7 @@ st.markdown("""
         padding: 1rem 1.2rem;
         border: 1px solid #334155;
         margin-bottom: 0.75rem;
+        position: relative;
     }
     .title { font-size: 1.65rem; font-weight: 750; margin: 0.15rem 0 0.05rem 0; }
     .subtitle { font-size: 0.95rem; color: #94a3b8; margin-bottom: 0.4rem; }
@@ -35,7 +36,25 @@ st.markdown("""
     .stat-label { font-size: 0.64rem; color: #94a3b8; text-transform: uppercase; }
     .stat-value { font-size: 1.1rem; font-weight: 700; }
     .alert { background: #422006; border-left: 4px solid #fbbf24; padding: 0.55rem 0.8rem; border-radius: 8px; margin-bottom: 0.6rem; }
-    .logo-header { text-align: center; margin-bottom: 0.3rem; }
+    .brand-header {
+        text-align: center;
+        margin-bottom: 0.6rem;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        color: #22d3ee;
+        font-size: 1.35rem;
+    }
+    .brand-sub { font-size: 0.75rem; color: #64748b; letter-spacing: 2px; margin-top: -0.2rem; }
+    .watermark {
+        position: fixed;
+        bottom: 12px;
+        right: 16px;
+        font-size: 0.7rem;
+        color: #334155;
+        letter-spacing: 1px;
+        pointer-events: none;
+        z-index: 999;
+    }
     .perf-card { background: #0f172a; border-radius: 12px; padding: 0.8rem; border: 1px solid #334155; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
@@ -99,13 +118,14 @@ if "code" in query_params and not st.session_state.discord_user:
         st.query_params.clear()
         st.rerun()
 
-st.markdown('<div class="logo-header">', unsafe_allow_html=True)
-st.image("https://i.imgur.com/placeholder.png", width=160)
-st.markdown("</div>", unsafe_allow_html=True)
+# Clean text branding
+st.markdown('<div class="brand-header">TRADERS EDGE</div>', unsafe_allow_html=True)
+st.markdown('<div class="brand-sub">TPI DASHBOARD</div>', unsafe_allow_html=True)
+st.markdown('<div class="watermark">TRADERS EDGE</div>', unsafe_allow_html=True)
 
 if not st.session_state.discord_user or not st.session_state.has_vip:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    st.subheader("Traders Edge · VIP Access")
+    st.subheader("VIP Access")
     if st.session_state.discord_user and not st.session_state.has_vip:
         st.error("You are logged in with Discord but do not have the VIP role.")
     else:
@@ -115,7 +135,6 @@ if not st.session_state.discord_user or not st.session_state.has_vip:
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# Member usage log
 def log_usage(username):
     log_file = "usage_log.json"
     entry = {"user": username, "time": datetime.now().strftime("%Y-%m-%d %H:%M")}
@@ -138,7 +157,6 @@ if user:
 
 @st.cache_data(ttl=180)
 def get_live_data():
-    # Replace with real call to compute_tpi() + update_paper_book() when ready
     return {
         "verdict": "LEAN BUY",
         "regime": "Bullish",
@@ -174,7 +192,6 @@ def get_live_data():
 
 data = get_live_data()
 
-# Regime change alert
 if len(data["regime_history"]) >= 2:
     last = data["regime_history"][-1]["regime"]
     prev = data["regime_history"][-2]["regime"]
@@ -223,7 +240,6 @@ with g4: st.plotly_chart(make_gauge(data["fng_norm"], f"Fear & Greed {data['fng'
 with g5: st.plotly_chart(make_gauge(data["btc_dom_trend"], "BTC Dom Trend", "dom"), use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Performance snapshot
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("30-Day Performance")
 p1, p2 = st.columns(2)
@@ -234,7 +250,6 @@ with p2:
 st.caption("Model vs Bitcoin over the last 30 days")
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Account
 pnl = data["balance"] - data["start_balance"]
 pnl_pct = (pnl / data["start_balance"]) * 100
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
@@ -246,7 +261,6 @@ a3.metric("Total P&L", f"${pnl:,.2f}", f"{pnl_pct:+.2f}%")
 a4.metric("Open Positions", "5")
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Equity curve
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Equity Curve vs BTC HODL")
 eq_df = pd.DataFrame(data["equity_curve"])
@@ -259,7 +273,6 @@ fig_eq.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
 st.plotly_chart(fig_eq, use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Regime history
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Regime History")
 reg_df = pd.DataFrame(data["regime_history"])
@@ -272,7 +285,6 @@ fig_reg.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)
 st.plotly_chart(fig_reg, use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Target mix
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Target Mix")
 assets = ["₿ BTC", "Ξ ETH", "🪙 Gold", "💵 Cash", "✦ Alts"]
@@ -291,7 +303,6 @@ fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", f
 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Open positions
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Open Positions")
 open_pos = pd.DataFrame({
@@ -308,7 +319,6 @@ with st.expander("Position details"):
     st.dataframe(open_pos, hide_index=True, use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Closed trades
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Closed Trades")
 closed_full = pd.DataFrame({
@@ -323,7 +333,6 @@ with st.expander("View full closed trade history"):
     st.dataframe(closed_full, hide_index=True, use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Alt sleeve
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Alt Sleeve")
 cols = st.columns(5)
@@ -335,7 +344,6 @@ for i, a in enumerate(data["alt_breakdown"]):
                     f'<div style="font-size:0.68rem; color:#94a3b8;">{a["note"]}</div></div>', unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Key stats
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Key Market Stats")
 c1, c2, c3, c4, c5 = st.columns(5)
@@ -355,7 +363,6 @@ st.caption(f"Last updated {data['timestamp']}  ·  Traders Edge VIP")
 if st.button("Refresh data", type="primary"):
     st.rerun()
 
-# Daily Discord summary (manual trigger for now)
 if DISCORD_WEBHOOK and st.button("Send daily summary to Discord"):
     msg = f"**TPI Daily** · {data['verdict']} · {data['regime']}\n{data['btc']}% BTC · {data['eth']}% ETH · {data['gold']}% Gold · {data['cash']}% Cash · {data['alts']}% Alts"
     requests.post(DISCORD_WEBHOOK, json={"content": msg})
