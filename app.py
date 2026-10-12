@@ -48,7 +48,7 @@ DISCORD_CLIENT_SECRET = st.secrets.get("DISCORD_CLIENT_SECRET", "I0waUTNBVXSEBEm
 DISCORD_SERVER_ID = "1177276514857922560"
 VIP_ROLE_ID = "1177332827742801990"
 REDIRECT_URI = st.secrets.get("REDIRECT_URI", "http://localhost:8501/")
-DISCORD_WEBHOOK = st.secrets.get("DISCORD_WEBHOOK", "")
+DISCORD_WEBHOOK = str(st.secrets.get("DISCORD_WEBHOOK", "")).strip()
 
 if "discord_user" not in st.session_state:
     st.session_state.discord_user = None
@@ -368,9 +368,11 @@ st.caption(f"Last updated {data['timestamp']}  ·  Traders Edge VIP")
 if st.button("Refresh data", type="primary"):
     st.rerun()
 
-# Discord summary button — always show if webhook exists
-if DISCORD_WEBHOOK:
-    if st.button("Send daily summary to Discord"):
+# Always show the Discord button
+if st.button("Send daily summary to Discord"):
+    if not DISCORD_WEBHOOK or not DISCORD_WEBHOOK.startswith("https://discord.com/api/webhooks/"):
+        st.error("Webhook is missing or invalid. Check the DISCORD_WEBHOOK secret (must be one single line).")
+    else:
         msg = (
             f"**TPI Daily** · {data['verdict']} · {data['regime']}\n"
             f"{data['btc']}% BTC · {data['eth']}% ETH · {data['gold']}% Gold · "
@@ -384,5 +386,3 @@ if DISCORD_WEBHOOK:
                 st.error(f"Discord returned {r.status_code}")
         except Exception as e:
             st.error(f"Failed to send: {e}")
-else:
-    st.caption("Add DISCORD_WEBHOOK to secrets to enable the summary button")
