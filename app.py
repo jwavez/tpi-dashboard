@@ -4,6 +4,8 @@ import pandas as pd
 import requests
 from datetime import datetime
 import urllib.parse
+import json
+import os
 
 st.set_page_config(
     page_title="Traders Edge · TPI",
@@ -15,25 +17,26 @@ st.set_page_config(
 st.markdown("""
 <style>
     .stApp { background-color: #0b1220; color: #e2e8f0; }
-    .block-container { padding-top: 0.6rem; padding-bottom: 1.4rem; max-width: 1320px; }
+    .block-container { padding-top: 0.5rem; padding-bottom: 1.2rem; max-width: 1320px; }
     .main-card {
         background: linear-gradient(145deg, #1e2937 0%, #162033 100%);
         border-radius: 16px;
-        padding: 1.15rem 1.35rem;
+        padding: 1rem 1.2rem;
         border: 1px solid #334155;
-        margin-bottom: 0.85rem;
+        margin-bottom: 0.75rem;
     }
-    .title { font-size: 1.7rem; font-weight: 750; margin: 0.2rem 0 0.05rem 0; }
-    .subtitle { font-size: 0.98rem; color: #94a3b8; margin-bottom: 0.45rem; }
+    .title { font-size: 1.65rem; font-weight: 750; margin: 0.15rem 0 0.05rem 0; }
+    .subtitle { font-size: 0.95rem; color: #94a3b8; margin-bottom: 0.4rem; }
     .verdict { color: #4ade80; font-weight: 650; }
     .stat-pill {
-        background: #0f172a; border-radius: 10px; padding: 0.55rem;
+        background: #0f172a; border-radius: 10px; padding: 0.5rem;
         text-align: center; border: 1px solid #334155;
     }
-    .stat-label { font-size: 0.66rem; color: #94a3b8; text-transform: uppercase; }
-    .stat-value { font-size: 1.15rem; font-weight: 700; }
-    .alert { background: #422006; border-left: 4px solid #fbbf24; padding: 0.6rem 0.9rem; border-radius: 8px; margin-bottom: 0.7rem; }
-    .logo-header { text-align: center; margin-bottom: 0.4rem; }
+    .stat-label { font-size: 0.64rem; color: #94a3b8; text-transform: uppercase; }
+    .stat-value { font-size: 1.1rem; font-weight: 700; }
+    .alert { background: #422006; border-left: 4px solid #fbbf24; padding: 0.55rem 0.8rem; border-radius: 8px; margin-bottom: 0.6rem; }
+    .logo-header { text-align: center; margin-bottom: 0.3rem; }
+    .perf-card { background: #0f172a; border-radius: 12px; padding: 0.8rem; border: 1px solid #334155; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -43,6 +46,7 @@ DISCORD_CLIENT_SECRET = st.secrets.get("DISCORD_CLIENT_SECRET", "I0waUTNBVXSEBEm
 DISCORD_SERVER_ID = "1177276514857922560"
 VIP_ROLE_ID = "1177332827742801990"
 REDIRECT_URI = st.secrets.get("REDIRECT_URI", "http://localhost:8501/")
+DISCORD_WEBHOOK = st.secrets.get("DISCORD_WEBHOOK", "")
 
 if "discord_user" not in st.session_state:
     st.session_state.discord_user = None
@@ -95,12 +99,10 @@ if "code" in query_params and not st.session_state.discord_user:
         st.query_params.clear()
         st.rerun()
 
-# Logo on every page
 st.markdown('<div class="logo-header">', unsafe_allow_html=True)
-st.image("https://i.imgur.com/placeholder.png", width=180)  # replace with your hosted logo URL
+st.image("https://i.imgur.com/placeholder.png", width=160)
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Gate
 if not st.session_state.discord_user or not st.session_state.has_vip:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
     st.subheader("Traders Edge · VIP Access")
@@ -113,8 +115,30 @@ if not st.session_state.discord_user or not st.session_state.has_vip:
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
+# Member usage log
+def log_usage(username):
+    log_file = "usage_log.json"
+    entry = {"user": username, "time": datetime.now().strftime("%Y-%m-%d %H:%M")}
+    try:
+        if os.path.exists(log_file):
+            with open(log_file, "r") as f:
+                logs = json.load(f)
+        else:
+            logs = []
+        logs.append(entry)
+        logs = logs[-200:]
+        with open(log_file, "w") as f:
+            json.dump(logs, f)
+    except Exception:
+        pass
+
+user = st.session_state.discord_user
+if user:
+    log_usage(user.get("username", "unknown"))
+
 @st.cache_data(ttl=180)
 def get_live_data():
+    # Replace with real call to compute_tpi() + update_paper_book() when ready
     return {
         "verdict": "LEAN BUY",
         "regime": "Bullish",
@@ -143,10 +167,19 @@ def get_live_data():
             {"date": "2026-10-05", "regime": "Bullish"},
             {"date": "2026-10-12", "regime": "Bullish"},
         ],
-        "alert": "Alt sleeve active (6%) — selective alts only",
+        "alert": None,
+        "perf_30d": -1.8,
+        "btc_30d": 4.2,
     }
 
 data = get_live_data()
+
+# Regime change alert
+if len(data["regime_history"]) >= 2:
+    last = data["regime_history"][-1]["regime"]
+    prev = data["regime_history"][-2]["regime"]
+    if last != prev:
+        data["alert"] = f"Regime changed from {prev} to {last}"
 
 def make_gauge(value, title, color_mode="neutral"):
     if color_mode in ("fng", "dom"):
@@ -155,23 +188,23 @@ def make_gauge(value, title, color_mode="neutral"):
         bar_color = "#fbbf24"
     fig = go.Figure(go.Indicator(
         mode="gauge+number", value=value,
-        number={"font": {"size": 22, "color": "white"}},
+        number={"font": {"size": 20, "color": "white"}},
         title={"text": title, "font": {"size": 11, "color": "#e2e8f0"}},
         gauge={
             "axis": {"range": [-1, 1], "tickwidth": 1, "tickcolor": "#64748b"},
-            "bar": {"color": bar_color, "thickness": 0.2},
+            "bar": {"color": bar_color, "thickness": 0.18},
             "bgcolor": "#1e2937", "borderwidth": 0,
             "steps": [
                 {"range": [-1, -0.3], "color": "#7f1d1d"},
                 {"range": [-0.3, 0.3], "color": "#334155"},
                 {"range": [0.3, 1], "color": "#14532d"},
             ],
-            "threshold": {"line": {"color": bar_color, "width": 5}, "thickness": 0.9, "value": value},
+            "threshold": {"line": {"color": bar_color, "width": 4}, "thickness": 0.85, "value": value},
         },
     ))
     fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                      font={"color": "#e2e8f0"}, height=190,
-                      margin=dict(l=8, r=8, t=28, b=0))
+                      font={"color": "#e2e8f0"}, height=175,
+                      margin=dict(l=6, r=6, t=26, b=0))
     return fig
 
 if data.get("alert"):
@@ -180,7 +213,6 @@ if data.get("alert"):
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.markdown('<div class="title">TPI Allocation · This Week</div>', unsafe_allow_html=True)
 st.markdown(f'<div class="subtitle">LEAN BUY · <span class="verdict">{data["regime"]}</span> · {data["rotation"]}</div>', unsafe_allow_html=True)
-user = st.session_state.discord_user
 if user:
     st.caption(f"Logged in as {user.get('username', 'VIP Member')}")
 g1, g2, g3, g4, g5 = st.columns(5)
@@ -191,6 +223,18 @@ with g4: st.plotly_chart(make_gauge(data["fng_norm"], f"Fear & Greed {data['fng'
 with g5: st.plotly_chart(make_gauge(data["btc_dom_trend"], "BTC Dom Trend", "dom"), use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
+# Performance snapshot
+st.markdown('<div class="main-card">', unsafe_allow_html=True)
+st.subheader("30-Day Performance")
+p1, p2 = st.columns(2)
+with p1:
+    st.markdown(f'<div class="perf-card"><div class="stat-label">TPI Model</div><div class="stat-value">{data["perf_30d"]:+.1f}%</div></div>', unsafe_allow_html=True)
+with p2:
+    st.markdown(f'<div class="perf-card"><div class="stat-label">BTC HODL</div><div class="stat-value">{data["btc_30d"]:+.1f}%</div></div>', unsafe_allow_html=True)
+st.caption("Model vs Bitcoin over the last 30 days")
+st.markdown("</div>", unsafe_allow_html=True)
+
+# Account
 pnl = data["balance"] - data["start_balance"]
 pnl_pct = (pnl / data["start_balance"]) * 100
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
@@ -202,6 +246,7 @@ a3.metric("Total P&L", f"${pnl:,.2f}", f"{pnl_pct:+.2f}%")
 a4.metric("Open Positions", "5")
 st.markdown("</div>", unsafe_allow_html=True)
 
+# Equity curve
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Equity Curve vs BTC HODL")
 eq_df = pd.DataFrame(data["equity_curve"])
@@ -209,23 +254,25 @@ fig_eq = go.Figure()
 fig_eq.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["equity"], name="TPI Account", line=dict(color="#4ade80", width=2.5)))
 fig_eq.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["btc_hodl"], name="BTC HODL", line=dict(color="#f7931a", width=2, dash="dot")))
 fig_eq.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#e2e8f0"),
-                     height=260, margin=dict(l=40, r=20, t=5, b=35),
+                     height=250, margin=dict(l=35, r=15, t=5, b=30),
                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 st.plotly_chart(fig_eq, use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
+# Regime history
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Regime History")
 reg_df = pd.DataFrame(data["regime_history"])
 fig_reg = go.Figure(go.Scatter(x=reg_df["date"], y=[1]*len(reg_df), mode="markers+text",
-                               marker=dict(size=14, color="#4ade80"),
+                               marker=dict(size=12, color="#4ade80"),
                                text=reg_df["regime"], textposition="top center"))
 fig_reg.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                      font=dict(color="#e2e8f0"), height=180, margin=dict(l=20, r=20, t=20, b=30),
+                      font=dict(color="#e2e8f0"), height=160, margin=dict(l=15, r=15, t=15, b=25),
                       yaxis=dict(visible=False), showlegend=False)
 st.plotly_chart(fig_reg, use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
+# Target mix
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Target Mix")
 assets = ["₿ BTC", "Ξ ETH", "🪙 Gold", "💵 Cash", "✦ Alts"]
@@ -234,16 +281,17 @@ colors = ["#f7931a", "#627eea", "#eab308", "#64748b", "#8b5cf6"]
 fig = go.Figure()
 for asset, val, color in zip(assets, values, colors):
     fig.add_trace(go.Bar(y=[asset], x=[val], orientation="h", marker_color=color,
-                         text=f"{val}%", textposition="outside", textfont=dict(color="white", size=13),
+                         text=f"{val}%", textposition="outside", textfont=dict(color="white", size=12),
                          hovertemplate=f"<b>{asset}</b><br>{val}%<extra></extra>", showlegend=False))
 fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#e2e8f0", size=12),
                   xaxis=dict(range=[0, 100], showgrid=False, showticklabels=False, zeroline=False),
-                  yaxis=dict(showgrid=False, tickfont=dict(size=14),
+                  yaxis=dict(showgrid=False, tickfont=dict(size=13),
                              categoryorder="array", categoryarray=["✦ Alts", "💵 Cash", "🪙 Gold", "Ξ ETH", "₿ BTC"]),
-                  height=280, margin=dict(l=100, r=45, t=5, b=5), bargap=0.34)
+                  height=260, margin=dict(l=95, r=40, t=5, b=5), bargap=0.32)
 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
+# Open positions
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Open Positions")
 open_pos = pd.DataFrame({
@@ -260,6 +308,7 @@ with st.expander("Position details"):
     st.dataframe(open_pos, hide_index=True, use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
+# Closed trades
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Closed Trades")
 closed_full = pd.DataFrame({
@@ -274,17 +323,19 @@ with st.expander("View full closed trade history"):
     st.dataframe(closed_full, hide_index=True, use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
+# Alt sleeve
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Alt Sleeve")
 cols = st.columns(5)
 for i, a in enumerate(data["alt_breakdown"]):
     with cols[i]:
-        st.markdown(f'<div style="background:#0f172a; border-radius:12px; padding:0.65rem; text-align:center; border:1px solid #334155;">'
+        st.markdown(f'<div style="background:#0f172a; border-radius:12px; padding:0.6rem; text-align:center; border:1px solid #334155;">'
                     f'<div style="font-weight:700;">{a["coin"]}</div>'
                     f'<div style="color:#8b5cf6; font-weight:650;">{a["pct"]}%</div>'
-                    f'<div style="font-size:0.7rem; color:#94a3b8;">{a["note"]}</div></div>', unsafe_allow_html=True)
+                    f'<div style="font-size:0.68rem; color:#94a3b8;">{a["note"]}</div></div>', unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
+# Key stats
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Key Market Stats")
 c1, c2, c3, c4, c5 = st.columns(5)
@@ -303,3 +354,9 @@ st.caption(f"Last updated {data['timestamp']}  ·  Traders Edge VIP")
 
 if st.button("Refresh data", type="primary"):
     st.rerun()
+
+# Daily Discord summary (manual trigger for now)
+if DISCORD_WEBHOOK and st.button("Send daily summary to Discord"):
+    msg = f"**TPI Daily** · {data['verdict']} · {data['regime']}\n{data['btc']}% BTC · {data['eth']}% ETH · {data['gold']}% Gold · {data['cash']}% Cash · {data['alts']}% Alts"
+    requests.post(DISCORD_WEBHOOK, json={"content": msg})
+    st.success("Summary sent")
