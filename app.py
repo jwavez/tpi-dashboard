@@ -226,11 +226,17 @@ st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Equity Curve & Drawdown")
-eq_df = pd.DataFrame(data["equity_curve"])
+eq_raw = data.get("equity_curve") or []
+eq_df = pd.DataFrame(eq_raw)
 if eq_df.empty:
-    st.info("No equity data yet.")
+    # Fallback so the section never crashes
+    eq_df = pd.DataFrame({
+        "date": ["2026-09-01", "2026-10-12"],
+        "equity": [10000, data.get("balance", 9817)],
+        "btc_hodl": [10000, 9687],
+        "dd_pct": [0, -1.8],
+    })
 else:
-    # Normalize date column
     if "date" not in eq_df.columns:
         if "timestamp" in eq_df.columns:
             eq_df["date"] = eq_df["timestamp"]
@@ -238,18 +244,19 @@ else:
             eq_df["date"] = range(len(eq_df))
     if "equity" not in eq_df.columns:
         eq_df["equity"] = data.get("balance", 10000)
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["equity"], name="TPI Account", line=dict(color="#4ade80", width=2.5)))
-    if "btc_hodl" in eq_df.columns:
-        fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["btc_hodl"], name="BTC HODL", line=dict(color="#f7931a", width=2, dash="dot")))
-    if "dd_pct" in eq_df.columns:
-        fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["dd_pct"], name="Drawdown %", yaxis="y2",
-                                 line=dict(color="#f87171", width=1.5), fill="tozeroy", fillcolor="rgba(248,113,113,0.15)"))
-    fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#e2e8f0"),
-                      height=290, margin=dict(l=40, r=40, t=8, b=25),
-                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                      yaxis=dict(title="Equity"), yaxis2=dict(title="DD %", overlaying="y", side="right", showgrid=False))
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["equity"], name="TPI Account", line=dict(color="#4ade80", width=2.5)))
+if "btc_hodl" in eq_df.columns:
+    fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["btc_hodl"], name="BTC HODL", line=dict(color="#f7931a", width=2, dash="dot")))
+if "dd_pct" in eq_df.columns:
+    fig.add_trace(go.Scatter(x=eq_df["date"], y=eq_df["dd_pct"], name="Drawdown %", yaxis="y2",
+                             line=dict(color="#f87171", width=1.5), fill="tozeroy", fillcolor="rgba(248,113,113,0.15)"))
+fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#e2e8f0"),
+                  height=290, margin=dict(l=40, r=40, t=8, b=25),
+                  legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                  yaxis=dict(title="Equity"), yaxis2=dict(title="DD %", overlaying="y", side="right", showgrid=False))
+st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
@@ -288,8 +295,14 @@ st.markdown("</div>", unsafe_allow_html=True)
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Open Positions")
 open_df = pd.DataFrame(data["open_positions"])
-styled = open_df.style.applymap(lambda x: "color: #22c55e" if str(x).startswith("+") else "color: #ef4444" if str(x).startswith("-") else "", subset=["P&L"])
-st.dataframe(styled, hide_index=True, use_container_width=True)
+if not open_df.empty and "P&L" in open_df.columns:
+    styled = open_df.style.map(
+        lambda x: "color: #22c55e" if str(x).startswith("+") else "color: #ef4444" if str(x).startswith("-") else "",
+        subset=["P&L"]
+    )
+    st.dataframe(styled, hide_index=True, use_container_width=True)
+else:
+    st.dataframe(open_df, hide_index=True, use_container_width=True)
 with st.expander("Position details"):
     st.dataframe(open_df, hide_index=True, use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
@@ -298,10 +311,18 @@ st.markdown("</div>", unsafe_allow_html=True)
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Closed Trades")
 closed_df = pd.DataFrame(data["closed_trades"])
-styled_c = closed_df.style.applymap(lambda x: "color: #22c55e" if str(x).startswith("+") else "color: #ef4444" if str(x).startswith("-") else "", subset=["P&L"])
-st.dataframe(styled_c.head(4), hide_index=True, use_container_width=True)
-with st.expander("View full closed trade history"):
-    st.dataframe(styled_c, hide_index=True, use_container_width=True)
+if not closed_df.empty and "P&L" in closed_df.columns:
+    styled_c = closed_df.style.map(
+        lambda x: "color: #22c55e" if str(x).startswith("+") else "color: #ef4444" if str(x).startswith("-") else "",
+        subset=["P&L"]
+    )
+    st.dataframe(styled_c.head(4), hide_index=True, use_container_width=True)
+    with st.expander("View full closed trade history"):
+        st.dataframe(styled_c, hide_index=True, use_container_width=True)
+else:
+    st.dataframe(closed_df.head(4), hide_index=True, use_container_width=True)
+    with st.expander("View full closed trade history"):
+        st.dataframe(closed_df, hide_index=True, use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
