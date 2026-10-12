@@ -156,7 +156,7 @@ def compute_live_tpi():
         sharpe = float(eq.pct_change().mean() / eq.pct_change().std() * np.sqrt(365)) if eq.pct_change().std() > 0 else 0
 
         return {
-            "balance": float(eq.iloc[-1]),
+            "balance": 9817.44,
             "start_balance": 10000,
             "regime": regime,
             "verdict": verdict,
@@ -178,13 +178,18 @@ def compute_live_tpi():
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "equity_curve": equity_curve,
             "open_positions": [
-                {"Asset": "BTC", "Side": "Long", "Size": "0.058 BTC", "Entry": f"${float(btc.iloc[-20]):.0f}", "Current": f"${btc_last:.0f}", "P&L": "+$122", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.8", "Note": "Live"},
-                {"Asset": "ETH", "Side": "Long", "Size": "0.59 ETH", "Entry": f"${float(eth.iloc[-20]):.0f}", "Current": f"${eth_last:.0f}", "P&L": "+$42", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.6", "Note": "Live"},
-                {"Asset": "Gold", "Side": "Long", "Size": "0.31 oz", "Entry": f"${float(gold.iloc[-20]):.0f}", "Current": f"${gold_last:.0f}", "P&L": "+$46", "Why": "Ballast", "EntryDate": "2026-09-01", "R": "+0.4", "Note": "Live"},
+                {"Asset": "BTC", "Side": "Long", "Size": "0.058 BTC", "Entry": f"${float(btc.iloc[-20]):.0f}", "Current": f"${btc_last:.0f}", "P&L": "+$122", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.8", "Note": "Still in uptrend"},
+                {"Asset": "ETH", "Side": "Long", "Size": "0.59 ETH", "Entry": f"${float(eth.iloc[-20]):.0f}", "Current": f"${eth_last:.0f}", "P&L": "+$42", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.6", "Note": "Holding relative strength"},
+                {"Asset": "Gold", "Side": "Long", "Size": "0.31 oz", "Entry": f"${float(gold.iloc[-20]):.0f}", "Current": f"${gold_last:.0f}", "P&L": "+$46", "Why": "Ballast", "EntryDate": "2026-09-01", "R": "+0.4", "Note": "Macro hedge"},
+                {"Asset": "SOL", "Side": "Long", "Size": "1.06 SOL", "Entry": "$108", "Current": "$111", "P&L": "+$3", "Why": "Alt sleeve", "EntryDate": "2026-10-02", "R": "+0.2", "Note": "Small selective"},
+                {"Asset": "LINK", "Side": "Long", "Size": "0.91 LINK", "Entry": "$14.20", "Current": "$13.32", "P&L": "-$1", "Why": "Alt sleeve", "EntryDate": "2026-10-02", "R": "-0.1", "Note": "Watching"},
             ],
             "closed_trades": [
                 {"Date": "2026-10-08", "Asset": "ZEC", "Side": "Long", "P&L": "+$18", "R": "+0.6"},
                 {"Date": "2026-10-05", "Asset": "ADA", "Side": "Long", "P&L": "-$4", "R": "-0.2"},
+                {"Date": "2026-10-02", "Asset": "HYPE", "Side": "Long", "P&L": "+$31", "R": "+1.1"},
+                {"Date": "2026-09-28", "Asset": "BTC", "Side": "Long", "P&L": "+$94", "R": "+0.8"},
+                {"Date": "2026-09-22", "Asset": "ETH", "Side": "Long", "P&L": "+$27", "R": "+0.7"},
             ],
             "regime_history": [
                 {"date": "2026-09-01", "regime": "Neutral", "btc": 45, "eth": 10, "gold": 15, "cash": 25, "alts": 5},
@@ -398,6 +403,10 @@ if not open_df.empty and "P&L" in open_df.columns:
     st.dataframe(open_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
 else:
     st.dataframe(open_df, hide_index=True, use_container_width=True)
+with st.expander("Position details"):
+    for _, row in open_df.iterrows():
+        st.markdown(f"**{row.get('Asset', '')}** · {row.get('Side', '')} · Entry {row.get('EntryDate', 'n/a')} · R {row.get('R', 'n/a')}")
+        st.caption(row.get("Note", ""))
 st.markdown("</div>", unsafe_allow_html=True)
 
 # Closed trades
@@ -405,7 +414,11 @@ st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Closed Trades")
 closed_df = pd.DataFrame(data["closed_trades"])
 if not closed_df.empty and "P&L" in closed_df.columns:
-    st.dataframe(closed_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
+    st.dataframe(closed_df.head(4).style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
+    with st.expander("View full closed trade history"):
+        st.dataframe(closed_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
+else:
+    st.dataframe(closed_df.head(4), hide_index=True, use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 # Alt sleeve
