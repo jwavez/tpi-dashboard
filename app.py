@@ -104,18 +104,26 @@ def compute_live_tpi():
         fng = int(fng_res.json()["data"][0]["value"]) if fng_res.status_code == 200 else 50
         fng_norm = (fng - 50) / 50
 
-        # Prices
-        btc = yf.download("BTC-USD", period="1y", interval="1d", progress=False)["Close"].dropna()
-        eth = yf.download("ETH-USD", period="1y", interval="1d", progress=False)["Close"].dropna()
-        gold = yf.download("GC=F", period="1y", interval="1d", progress=False)["Close"].dropna()
+        # Prices — force Series and scalar values
+        btc_raw = yf.download("BTC-USD", period="1y", interval="1d", progress=False)
+        eth_raw = yf.download("ETH-USD", period="1y", interval="1d", progress=False)
+        gold_raw = yf.download("GC=F", period="1y", interval="1d", progress=False)
 
-        btc_ret_30 = (btc.iloc[-1] / btc.iloc[-30] - 1) * 100 if len(btc) > 30 else 0
-        eth_ret_30 = (eth.iloc[-1] / eth.iloc[-30] - 1) * 100 if len(eth) > 30 else 0
+        btc = btc_raw["Close"].squeeze().dropna() if "Close" in btc_raw else btc_raw.iloc[:, 0].dropna()
+        eth = eth_raw["Close"].squeeze().dropna() if "Close" in eth_raw else eth_raw.iloc[:, 0].dropna()
+        gold = gold_raw["Close"].squeeze().dropna() if "Close" in gold_raw else gold_raw.iloc[:, 0].dropna()
 
-        # Simple regime scores
-        ltpi = np.clip(btc_ret_30 / 20, -1, 1)
-        mtpi = np.clip((btc.iloc[-1] / btc.iloc[-10] - 1) * 5, -1, 1) if len(btc) > 10 else 0
-        macro = np.clip((fng_norm + ltpi) / 2, -1, 1)
+        btc_last = float(btc.iloc[-1])
+        eth_last = float(eth.iloc[-1])
+        gold_last = float(gold.iloc[-1])
+
+        btc_ret_30 = float(btc.iloc[-1] / btc.iloc[-30] - 1) * 100 if len(btc) > 30 else 0.0
+        eth_ret_30 = float(eth.iloc[-1] / eth.iloc[-30] - 1) * 100 if len(eth) > 30 else 0.0
+
+        # Simple regime scores (scalars only)
+        ltpi = float(np.clip(btc_ret_30 / 20, -1, 1))
+        mtpi = float(np.clip((btc.iloc[-1] / btc.iloc[-10] - 1) * 5, -1, 1)) if len(btc) > 10 else 0.0
+        macro = float(np.clip((fng_norm + ltpi) / 2, -1, 1))
 
         regime = "Bullish" if ltpi > 0.25 else "Bearish" if ltpi < -0.25 else "Neutral"
         verdict = "LEAN BUY" if regime == "Bullish" else "LEAN SELL" if regime == "Bearish" else "HOLD"
@@ -128,10 +136,11 @@ def compute_live_tpi():
         cash_w = 100 - btc_w - eth_w - gold_w - 6
         alts_w = 6
 
-        # Equity curve (simple model)
+        # Equity curve (simple model) — force numeric Series
         dates = btc.index[-60:]
-        eq = 10000 * (1 + (btc.pct_change().fillna(0).iloc[-60:].cumsum() * 0.5))
-        btc_hodl = 10000 * (btc.iloc[-60:] / btc.iloc[-60])
+        btc_slice = btc.iloc[-60:].astype(float)
+        eq = 10000 * (1 + (btc_slice.pct_change().fillna(0).cumsum() * 0.5))
+        btc_hodl = 10000 * (btc_slice / btc_slice.iloc[0])
         dd = (eq / eq.cummax() - 1) * 100
 
         equity_curve = [
@@ -160,7 +169,7 @@ def compute_live_tpi():
             "btc_dom_trend": 1.0 if btc_ret_30 > eth_ret_30 else -0.5,
             "btc_dom": 59.5,
             "altseason_30": 54,
-            "eth_btc": float(eth.iloc[-1] / btc.iloc[-1]),
+            "eth_btc": float(eth_last / btc_last) if btc_last else 0.0,
             "btc": btc_w,
             "eth": eth_w,
             "gold": gold_w,
@@ -169,9 +178,9 @@ def compute_live_tpi():
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "equity_curve": equity_curve,
             "open_positions": [
-                {"Asset": "BTC", "Side": "Long", "Size": "0.058 BTC", "Entry": f"${btc.iloc[-20]:.0f}", "Current": f"${btc.iloc[-1]:.0f}", "P&L": "+$122", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.8", "Note": "Live"},
-                {"Asset": "ETH", "Side": "Long", "Size": "0.59 ETH", "Entry": f"${eth.iloc[-20]:.0f}", "Current": f"${eth.iloc[-1]:.0f}", "P&L": "+$42", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.6", "Note": "Live"},
-                {"Asset": "Gold", "Side": "Long", "Size": "0.31 oz", "Entry": f"${gold.iloc[-20]:.0f}", "Current": f"${gold.iloc[-1]:.0f}", "P&L": "+$46", "Why": "Ballast", "EntryDate": "2026-09-01", "R": "+0.4", "Note": "Live"},
+                {"Asset": "BTC", "Side": "Long", "Size": "0.058 BTC", "Entry": f"${float(btc.iloc[-20]):.0f}", "Current": f"${btc_last:.0f}", "P&L": "+$122", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.8", "Note": "Live"},
+                {"Asset": "ETH", "Side": "Long", "Size": "0.59 ETH", "Entry": f"${float(eth.iloc[-20]):.0f}", "Current": f"${eth_last:.0f}", "P&L": "+$42", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.6", "Note": "Live"},
+                {"Asset": "Gold", "Side": "Long", "Size": "0.31 oz", "Entry": f"${float(gold.iloc[-20]):.0f}", "Current": f"${gold_last:.0f}", "P&L": "+$46", "Why": "Ballast", "EntryDate": "2026-09-01", "R": "+0.4", "Note": "Live"},
             ],
             "closed_trades": [
                 {"Date": "2026-10-08", "Asset": "ZEC", "Side": "Long", "P&L": "+$18", "R": "+0.6"},
