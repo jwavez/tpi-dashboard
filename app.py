@@ -261,25 +261,17 @@ def compute_live_tpi():
             "alts": alts_w,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "equity_curve": equity_curve,
-            "open_positions": [
-                {"Asset": "BTC", "Side": "Long", "Size": "0.058 BTC", "Entry": f"${float(btc.iloc[-20]):.0f}", "Current": f"${btc_last:.0f}", "P&L": "+$122", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.8", "Note": "Still in uptrend"},
-                {"Asset": "ETH", "Side": "Long", "Size": "0.59 ETH", "Entry": f"${float(eth.iloc[-20]):.0f}", "Current": f"${eth_last:.0f}", "P&L": "+$42", "Why": "Core sleeve", "EntryDate": "2026-09-18", "R": "+0.6", "Note": "Holding relative strength"},
-                {"Asset": "Gold", "Side": "Long", "Size": "0.31 oz", "Entry": f"${float(gold.iloc[-20]):.0f}", "Current": f"${gold_last:.0f}", "P&L": "+$46", "Why": "Ballast", "EntryDate": "2026-09-01", "R": "+0.4", "Note": "Macro hedge"},
-            ],
-            "closed_trades": [
-                {"Date": "2026-10-08", "Asset": "ZEC", "Side": "Long", "P&L": "+$18", "R": "+0.6"},
-                {"Date": "2026-10-05", "Asset": "ADA", "Side": "Long", "P&L": "-$4", "R": "-0.2"},
-            ],
+            "open_positions": [],
+            "closed_trades": [],
             "regime_history": [
-                {"date": "2026-09-01", "regime": "Neutral", "btc": 45, "eth": 10, "gold": 15, "cash": 25, "alts": 5},
                 {"date": datetime.now().strftime("%Y-%m-%d"), "regime": regime, "btc": btc_w, "eth": eth_w, "gold": gold_w, "cash": cash_w, "alts": alts_w},
             ],
             "alt_breakdown": [
-                {"coin": "SOL", "pct": 0, "note": "High-throughput L1"},
-                {"coin": "ZEC", "pct": 0, "note": "Privacy coin"},
-                {"coin": "HYPE", "pct": 0, "note": "Perp DEX"},
-                {"coin": "LINK", "pct": 0, "note": "Oracle"},
-                {"coin": "ADA", "pct": 0, "note": "Research L1"},
+                {"coin": "SOL", "pct": 0, "note": "Not held"},
+                {"coin": "ZEC", "pct": 0, "note": "Not held"},
+                {"coin": "HYPE", "pct": 0, "note": "Not held"},
+                {"coin": "LINK", "pct": 0, "note": "Not held"},
+                {"coin": "ADA", "pct": 0, "note": "Not held"},
             ],
             "perf_7d": float(perf_7d),
             "perf_30d": float(perf_30d),
@@ -486,31 +478,32 @@ st.markdown("</div>", unsafe_allow_html=True)
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Open Positions")
 open_df = pd.DataFrame(data["open_positions"])
-def color_pnl(val):
-    s = str(val)
-    if s.startswith("+"): return "color: #22c55e"
-    if s.startswith("-"): return "color: #ef4444"
-    return ""
-if not open_df.empty and "P&L" in open_df.columns:
-    st.dataframe(open_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
+if open_df.empty:
+    st.info("No open positions currently. When the model holds positions they will appear here with real entry and P&L data.")
 else:
-    st.dataframe(open_df, hide_index=True, use_container_width=True)
-with st.expander("Position details"):
-    for _, row in open_df.iterrows():
-        st.markdown(f"**{row.get('Asset', '')}** · {row.get('Side', '')} · Entry {row.get('EntryDate', 'n/a')} · R {row.get('R', 'n/a')}")
-        st.caption(row.get("Note", ""))
+    if "P&L" in open_df.columns:
+        st.dataframe(open_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
+    else:
+        st.dataframe(open_df, hide_index=True, use_container_width=True)
+    with st.expander("Position details"):
+        for _, row in open_df.iterrows():
+            st.markdown(f"**{row.get('Asset', '')}** · {row.get('Side', '')} · Entry {row.get('EntryDate', 'n/a')} · R {row.get('R', 'n/a')}")
+            st.caption(row.get("Note", ""))
 st.markdown("</div>", unsafe_allow_html=True)
 
 # Closed trades
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Closed Trades")
 closed_df = pd.DataFrame(data["closed_trades"])
-if not closed_df.empty and "P&L" in closed_df.columns:
-    st.dataframe(closed_df.head(4).style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
-    with st.expander("View full closed trade history"):
-        st.dataframe(closed_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
+if closed_df.empty:
+    st.info("No closed trades recorded yet. Position tracking starts from this login. Future closes will appear here with real P&L.")
 else:
-    st.dataframe(closed_df.head(4), hide_index=True, use_container_width=True)
+    if "P&L" in closed_df.columns:
+        st.dataframe(closed_df.head(4).style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
+        with st.expander("View full closed trade history"):
+            st.dataframe(closed_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
+    else:
+        st.dataframe(closed_df, hide_index=True, use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 # Alt sleeve
