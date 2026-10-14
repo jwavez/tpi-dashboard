@@ -3,8 +3,11 @@ name: Daily TPI Discord Update
 on:
   schedule:
     - cron: "17 8 * * *"   # 08:17 UTC
-    - cron: "17 9 * * *"   # backup at 09:17 UTC
+    - cron: "17 9 * * *"   # backup 09:17 UTC
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   post:
@@ -12,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -28,3 +33,11 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           STREAMLIT_URL: https://tradersedge-tpi.streamlit.app/
         run: python TPIindi.py
+
+      - name: Commit paper book files
+        run: |
+          git config user.name "TPI Bot"
+          git config user.email "tpi-bot@users.noreply.github.com"
+          git add tpi_paper_book.json tpi_paper_trades.csv tpi_paper_equity.csv tpi_history.json btc_dominance_history.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "Update TPI paper book $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
