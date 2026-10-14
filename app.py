@@ -177,62 +177,98 @@ if is_admin:
     st.markdown('<div style="background:#7f1d1d; color:white; padding:0.4rem 0.8rem; border-radius:8px; margin-bottom:0.6rem; font-weight:600;">Admin Mode</div>', unsafe_allow_html=True)
 
 # ---------- Live TPI calculation ----------
-def _load_paper_positions():
-    """Load open positions from paper book if present."""
+def _load_paper_book():
+    """Return paper book dict or None."""
     try:
         if os.path.exists("tpi_paper_book.json"):
             with open("tpi_paper_book.json", "r", encoding="utf-8") as f:
-                book = json.load(f)
-            positions = []
-            pos = book.get("positions") or {}
-            for asset in ["BTC", "ETH", "GOLD"]:
-                rec = pos.get(asset) or {}
-                qty = float(rec.get("qty") or 0)
-                if qty > 0:
-                    positions.append({
-                        "Asset": asset,
-                        "Side": "LONG",
-                        "Size": round(qty, 4),
-                        "Entry": round(float(rec.get("avg_px") or 0), 2),
-                        "P&L": "—",
-                    })
-            alts = pos.get("ALTS") or {}
-            for sym, rec in alts.items():
-                qty = float(rec.get("qty") or 0)
-                if qty > 0:
-                    positions.append({
-                        "Asset": sym,
-                        "Side": "LONG",
-                        "Size": round(qty, 4),
-                        "Entry": round(float(rec.get("avg_px") or 0), 2),
-                        "P&L": "—",
-                    })
-            return positions
+                return json.load(f)
     except Exception:
         pass
-    return []
+    return None
+
+
+def _load_paper_positions():
+    """Load open positions from paper book. Matches actual structure (qty only)."""
+    book = _load_paper_book()
+    if not book:
+        return []
+    positions = []
+    pos = book.get("positions") or {}
+    for asset in ["BTC", "ETH", "GOLD"]:
+        rec = pos.get(asset) or {}
+        qty = float(rec.get("qty") or 0)
+        if qty > 0.0001:
+            positions.append({
+                "Asset": asset,
+                "Side": "LONG",
+                "Size": round(qty, 6),
+                "Entry": "—",
+                "P&L": "—",
+            })
+    alts = pos.get("ALTS") or {}
+    for sym, rec in alts.items():
+        qty = float((rec or {}).get("qty") or 0)
+        if qty > 0.0001:
+            positions.append({
+                "Asset": sym,
+                "Side": "LONG",
+                "Size": round(qty, 6),
+                "Entry": "—",
+                "P&L": "—",
+            })
+    return positions
 
 
 def _load_paper_trades():
-    """Load closed trades from CSV if present."""
+    """Load recent trades from paper book trades list or CSV."""
+    book = _load_paper_book()
+    rows = []
+    if book and book.get("trades"):
+        for t in reversed(book["trades"][-30:]):
+            rows.append({
+                "Date": str(t.get("ts", ""))[:16],
+                "Asset": t.get("sym", ""),
+                "Side": t.get("side", ""),
+                "Qty": round(float(t.get("qty") or 0), 6),
+                "USD": round(float(t.get("usd") or 0), 2),
+                "Reason": str(t.get("reason", ""))[:40],
+            })
+        if rows:
+            return rows
+    # Fallback to CSV
     try:
         if os.path.exists("tpi_paper_trades.csv"):
             df = pd.read_csv("tpi_paper_trades.csv")
             if not df.empty:
-                rows = []
-                for _, r in df.tail(20).iterrows():
-                    pnl = float(r.get("pnl", 0) or 0)
+                for _, r in df.tail(30).iterrows():
                     rows.append({
                         "Date": str(r.get("timestamp", ""))[:16],
                         "Asset": r.get("symbol", ""),
                         "Side": r.get("side", ""),
-                        "P&L": f"{pnl:+.2f}",
-                        "Reason": r.get("reason", ""),
+                        "Qty": round(float(r.get("qty") or 0), 6),
+                        "USD": round(float(r.get("usd") or 0), 2),
+                        "Reason": str(r.get("reason", ""))[:40],
                     })
-                return rows
     except Exception:
         pass
-    return []
+    return rows
+
+
+def _load_latest_equity():
+    """Latest equity from paper book equity_curve or equity CSV."""
+    book = _load_paper_book()
+    if book and book.get("equity_curve"):
+        last = book["equity_curve"][-1]
+        return float(last.get("equity") or 0)
+    try:
+        if os.path.exists("tpi_paper_equity.csv"):
+            df = pd.read_csv("tpi_paper_equity.csv")
+            if not df.empty:
+                return float(df.iloc[-1].get("equity") or 0)
+    except Exception:
+        pass
+    return None
 
 
 @st.cache_data(ttl=60)
@@ -275,12 +311,12 @@ def compute_live_tpi():
         cash_w = 20
         alts_w = 0
 
-        # Equity curve — use a more realistic paper balance that can update
+        # Equity curve — prefer real paper book equity when available
         dates = btc.index[-60:]
         btc_slice = btc.iloc[-60:].astype(float)
         raw_eq = 10000 * (1 + (btc_slice.pct_change().fillna(0).cumsum() * 0.45))
-        # Scale toward the latest known paper figure so it stays close to TPI indi
-        target_balance = 9927.09
+        paper_eq = _load_latest_equity()
+        target_balance = paper_eq if paper_eq and paper_eq > 0 else 9927.09
         scale = target_balance / float(raw_eq.iloc[-1]) if float(raw_eq.iloc[-1]) != 0 else 1.0
         eq = raw_eq * scale
         btc_hodl = 10000 * (btc_slice / btc_slice.iloc[0])
