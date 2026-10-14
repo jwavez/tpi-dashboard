@@ -177,6 +177,64 @@ if is_admin:
     st.markdown('<div style="background:#7f1d1d; color:white; padding:0.4rem 0.8rem; border-radius:8px; margin-bottom:0.6rem; font-weight:600;">Admin Mode</div>', unsafe_allow_html=True)
 
 # ---------- Live TPI calculation ----------
+def _load_paper_positions():
+    """Load open positions from paper book if present."""
+    try:
+        if os.path.exists("tpi_paper_book.json"):
+            with open("tpi_paper_book.json", "r", encoding="utf-8") as f:
+                book = json.load(f)
+            positions = []
+            pos = book.get("positions") or {}
+            for asset in ["BTC", "ETH", "GOLD"]:
+                rec = pos.get(asset) or {}
+                qty = float(rec.get("qty") or 0)
+                if qty > 0:
+                    positions.append({
+                        "Asset": asset,
+                        "Side": "LONG",
+                        "Size": round(qty, 4),
+                        "Entry": round(float(rec.get("avg_px") or 0), 2),
+                        "P&L": "—",
+                    })
+            alts = pos.get("ALTS") or {}
+            for sym, rec in alts.items():
+                qty = float(rec.get("qty") or 0)
+                if qty > 0:
+                    positions.append({
+                        "Asset": sym,
+                        "Side": "LONG",
+                        "Size": round(qty, 4),
+                        "Entry": round(float(rec.get("avg_px") or 0), 2),
+                        "P&L": "—",
+                    })
+            return positions
+    except Exception:
+        pass
+    return []
+
+
+def _load_paper_trades():
+    """Load closed trades from CSV if present."""
+    try:
+        if os.path.exists("tpi_paper_trades.csv"):
+            df = pd.read_csv("tpi_paper_trades.csv")
+            if not df.empty:
+                rows = []
+                for _, r in df.tail(20).iterrows():
+                    pnl = float(r.get("pnl", 0) or 0)
+                    rows.append({
+                        "Date": str(r.get("timestamp", ""))[:16],
+                        "Asset": r.get("symbol", ""),
+                        "Side": r.get("side", ""),
+                        "P&L": f"{pnl:+.2f}",
+                        "Reason": r.get("reason", ""),
+                    })
+                return rows
+    except Exception:
+        pass
+    return []
+
+
 @st.cache_data(ttl=60)
 def compute_live_tpi():
     try:
@@ -261,8 +319,8 @@ def compute_live_tpi():
             "alts": alts_w,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "equity_curve": equity_curve,
-            "open_positions": [],
-            "closed_trades": [],
+            "open_positions": _load_paper_positions(),
+            "closed_trades": _load_paper_trades(),
             "regime_history": [
                 {"date": datetime.now().strftime("%Y-%m-%d"), "regime": regime, "btc": btc_w, "eth": eth_w, "gold": gold_w, "cash": cash_w, "alts": alts_w},
             ],
