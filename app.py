@@ -569,20 +569,31 @@ st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 st.markdown("</div>", unsafe_allow_html=True)
 
 # Open positions
+def color_pnl(val):
+    try:
+        s = str(val)
+        if s.startswith("+"):
+            return "color: #22c55e"
+        if s.startswith("-"):
+            return "color: #ef4444"
+    except Exception:
+        pass
+    return ""
+
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Open Positions")
 open_df = pd.DataFrame(data["open_positions"])
 if open_df.empty:
     st.info("No open positions currently. When the model holds positions they will appear here with real entry and P&L data.")
 else:
-    if "P&L" in open_df.columns:
+    if "P&L" in open_df.columns and open_df["P&L"].astype(str).str.contains(r"[+-]").any():
         st.dataframe(open_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
     else:
         st.dataframe(open_df, hide_index=True, use_container_width=True)
     with st.expander("Position details"):
         for _, row in open_df.iterrows():
-            st.markdown(f"**{row.get('Asset', '')}** · {row.get('Side', '')} · Entry {row.get('EntryDate', 'n/a')} · R {row.get('R', 'n/a')}")
-            st.caption(row.get("Note", ""))
+            st.markdown(f"**{row.get('Asset', '')}** · {row.get('Side', '')} · Size {row.get('Size', 'n/a')}")
+            st.caption(row.get("Note", "Open position from paper book"))
 st.markdown("</div>", unsafe_allow_html=True)
 
 # Closed trades
@@ -592,7 +603,7 @@ closed_df = pd.DataFrame(data["closed_trades"])
 if closed_df.empty:
     st.info("No closed trades recorded yet. Position tracking starts from this login. Future closes will appear here with real P&L.")
 else:
-    if "P&L" in closed_df.columns:
+    if "P&L" in closed_df.columns and closed_df["P&L"].astype(str).str.contains(r"[+-]").any():
         st.dataframe(closed_df.head(4).style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
         with st.expander("View full closed trade history"):
             st.dataframe(closed_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
