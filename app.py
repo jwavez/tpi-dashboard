@@ -188,70 +188,107 @@ def _load_paper_book():
     return None
 
 
-def _load_paper_positions():
-    """Load open positions from paper book. Matches actual structure (qty only)."""
+def _load_paper_positions(live_prices=None):
+    """Load open positions with entry, current price, USD and unrealized P&L."""
     book = _load_paper_book()
     if not book:
         return []
+    live_prices = live_prices or {}
     positions = []
     pos = book.get("positions") or {}
-    for asset in ["BTC", "ETH", "GOLD"]:
-        rec = pos.get(asset) or {}
-        qty = float(rec.get("qty") or 0)
-        if qty > 0.0001:
-            positions.append({
-                "Asset": asset,
-                "Side": "LONG",
-                "Size": round(qty, 6),
-                "Entry": "—",
-                "P&L": "—",
-            })
-    alts = pos.get("ALTS") or {}
-    for sym, rec in alts.items():
+
+    def _one(asset, rec):
         qty = float((rec or {}).get("qty") or 0)
-        if qty > 0.0001:
-            positions.append({
-                "Asset": sym,
-                "Side": "LONG",
-                "Size": round(qty, 6),
-                "Entry": "—",
-                "P&L": "—",
-            })
+        if qty <= 0.0001:
+            return None
+        entry_px = float((rec or {}).get("entry") or 0)
+        if entry_px <= 0:
+            # fallback to last buy price from trades
+            for t in reversed(book.get("trades") or []):
+                if t.get("sym") == asset and t.get("side") == "BUY":
+                    entry_px = float(t.get("px") or 0)
+                    break
+        px = float(live_prices.get(asset) or 0)
+        if px <= 0:
+            px = entry_px
+        usd = qty * px
+        cost = qty * entry_px if entry_px else 0
+        pnl = usd - cost if cost else 0
+        return {
+            "Asset": asset,
+            "Side": "LONG",
+            "Size": round(qty, 6),
+            "Entry": round(entry_px, 2) if entry_px else "—",
+            "Current": round(px, 2) if px else "—",
+            "USD": round(usd, 2),
+            "P&L": f"{pnl:+.2f}",
+        }
+
+    for asset in ["BTC", "ETH", "GOLD"]:
+        row = _one(asset, pos.get(asset))
+        if row:
+            positions.append(row)
+    for sym, rec in (pos.get("ALTS") or {}).items():
+        row = _one(sym, rec)
+        if row:
+            positions.append(row)
     return positions
 
 
 def _load_paper_trades():
-    """Load recent trades from paper book trades list or CSV."""
+    """Load recent trades. Add P&L column for sells when possible."""
     book = _load_paper_book()
     rows = []
+    trades = []
     if book and book.get("trades"):
-        for t in reversed(book["trades"][-30:]):
-            rows.append({
-                "Date": str(t.get("ts", ""))[:16],
-                "Asset": t.get("sym", ""),
-                "Side": t.get("side", ""),
-                "Qty": round(float(t.get("qty") or 0), 6),
-                "USD": round(float(t.get("usd") or 0), 2),
-                "Reason": str(t.get("reason", ""))[:40],
-            })
-        if rows:
-            return rows
-    # Fallback to CSV
-    try:
-        if os.path.exists("tpi_paper_trades.csv"):
-            df = pd.read_csv("tpi_paper_trades.csv")
-            if not df.empty:
-                for _, r in df.tail(30).iterrows():
-                    rows.append({
-                        "Date": str(r.get("timestamp", ""))[:16],
-                        "Asset": r.get("symbol", ""),
-                        "Side": r.get("side", ""),
-                        "Qty": round(float(r.get("qty") or 0), 6),
-                        "USD": round(float(r.get("usd") or 0), 2),
-                        "Reason": str(r.get("reason", ""))[:40],
+        trades = list(book["trades"])
+    else:
+        try:
+            if os.path.exists("tpi_paper_trades.csv"):
+                df = pd.read_csv("tpi_paper_trades.csv")
+                for _, r in df.iterrows():
+                    trades.append({
+                        "ts": r.get("timestamp"),
+                        "side": r.get("side"),
+                        "sym": r.get("symbol"),
+                        "qty": float(r.get("qty") or 0),
+                        "px": float(r.get("price") or 0),
+                        "usd": float(r.get("usd") or 0),
+                        "reason": r.get("reason"),
                     })
-    except Exception:
-        pass
+        except Exception:
+            pass
+
+    # Build cost basis map for simple P&L on sells
+    avg_cost = {}
+    for t in trades:
+        sym = t.get("sym")
+        side = t.get("side")
+        qty = float(t.get("qty") or 0)
+        px = float(t.get("px") or 0)
+        if side == "BUY" and qty > 0:
+            prev_qty, prev_px = avg_cost.get(sym, (0, 0))
+            new_qty = prev_qty + qty
+            new_px = ((prev_qty * prev_px) + (qty * px)) / new_qty if new_qty else px
+            avg_cost[sym] = (new_qty, new_px)
+        elif side == "SELL" and qty > 0:
+            cost_px = avg_cost.get(sym, (0, px))[1]
+            pnl = (px - cost_px) * qty
+            t["_pnl"] = pnl
+            prev_qty, prev_px = avg_cost.get(sym, (0, 0))
+            avg_cost[sym] = (max(0, prev_qty - qty), prev_px)
+
+    for t in reversed(trades[-30:]):
+        pnl = t.get("_pnl")
+        rows.append({
+            "Date": str(t.get("ts", ""))[:16],
+            "Asset": t.get("sym", ""),
+            "Side": t.get("side", ""),
+            "Qty": round(float(t.get("qty") or 0), 6),
+            "USD": round(float(t.get("usd") or 0), 2),
+            "P&L": f"{pnl:+.2f}" if pnl is not None else "—",
+            "Reason": str(t.get("reason", ""))[:40],
+        })
     return rows
 
 
@@ -355,7 +392,7 @@ def compute_live_tpi():
             "alts": alts_w,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "equity_curve": equity_curve,
-            "open_positions": _load_paper_positions(),
+            "open_positions": _load_paper_positions({"BTC": btc_last, "ETH": eth_last, "GOLD": gold_last}),
             "closed_trades": _load_paper_trades(),
             "regime_history": [
                 {"date": datetime.now().strftime("%Y-%m-%d"), "regime": regime, "btc": btc_w, "eth": eth_w, "gold": gold_w, "cash": cash_w, "alts": alts_w},
@@ -586,14 +623,13 @@ open_df = pd.DataFrame(data["open_positions"])
 if open_df.empty:
     st.info("No open positions currently. When the model holds positions they will appear here with real entry and P&L data.")
 else:
-    if "P&L" in open_df.columns and open_df["P&L"].astype(str).str.contains(r"[+-]").any():
+    if "P&L" in open_df.columns:
         st.dataframe(open_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
     else:
         st.dataframe(open_df, hide_index=True, use_container_width=True)
     with st.expander("Position details"):
         for _, row in open_df.iterrows():
-            st.markdown(f"**{row.get('Asset', '')}** · {row.get('Side', '')} · Size {row.get('Size', 'n/a')}")
-            st.caption(row.get("Note", "Open position from paper book"))
+            st.markdown(f"**{row.get('Asset', '')}** · {row.get('Side', '')} · Size {row.get('Size', 'n/a')} · Entry {row.get('Entry', '—')} · Current {row.get('Current', '—')} · P&L {row.get('P&L', '—')}")
 st.markdown("</div>", unsafe_allow_html=True)
 
 # Closed trades
@@ -603,8 +639,8 @@ closed_df = pd.DataFrame(data["closed_trades"])
 if closed_df.empty:
     st.info("No closed trades recorded yet. Position tracking starts from this login. Future closes will appear here with real P&L.")
 else:
-    if "P&L" in closed_df.columns and closed_df["P&L"].astype(str).str.contains(r"[+-]").any():
-        st.dataframe(closed_df.head(4).style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
+    if "P&L" in closed_df.columns:
+        st.dataframe(closed_df.head(6).style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
         with st.expander("View full closed trade history"):
             st.dataframe(closed_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
     else:
