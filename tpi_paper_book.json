@@ -1,66 +1,27 @@
 {
-  "started": "2026-09-05",
+  "started": "2026-10-14",
   "start_equity": 10000.0,
-  "cash": 1985.42,
+  "cash": 10000.0,
   "positions": {
     "BTC": {
-      "qty": 0.07636223,
-      "entry": 65000,
-      "entry_usd": 4963.54
+      "qty": 0.0,
+      "entry": 0.0
     },
     "ETH": {
-      "qty": 0.5956254,
-      "entry": 2500,
-      "entry_usd": 1489.06
+      "qty": 0.0,
+      "entry": 0.0
     },
     "GOLD": {
-      "qty": 0.56191075,
-      "entry": 2650,
-      "entry_usd": 1489.06
+      "qty": 0.0,
+      "entry": 0.0
     },
     "ALTS": {}
   },
-  "last_regime": "Bullish",
-  "last_rebalance": "2026-10-13 08:03",
-  "start_btc_px": 62000,
-  "btc_hodl_qty": 0.16129032,
+  "last_regime": null,
+  "last_rebalance": null,
+  "start_btc_px": null,
+  "btc_hodl_qty": 0.0,
   "peak_equity": 10000.0,
-  "trades": [
-    {
-      "ts": "2026-09-05 12:00",
-      "side": "BUY",
-      "sym": "BTC",
-      "qty": 0.07636223,
-      "px": 65000,
-      "usd": 4963.55,
-      "reason": "init"
-    },
-    {
-      "ts": "2026-09-05 12:00",
-      "side": "BUY",
-      "sym": "ETH",
-      "qty": 0.5956254,
-      "px": 2500,
-      "usd": 1489.06,
-      "reason": "init"
-    },
-    {
-      "ts": "2026-09-05 12:00",
-      "side": "BUY",
-      "sym": "GOLD",
-      "qty": 0.56191075,
-      "px": 2650,
-      "usd": 1489.06,
-      "reason": "init"
-    }
-  ],
-  "equity_curve": [
-    {
-      "timestamp": "2026-10-13 08:03",
-      "equity": 9927.09,
-      "btc_hodl": 10483.87,
-      "dd_pct": -0.73,
-      "regime": "Bullish"
-    }
-  ]
+  "trades": [],
+  "equity_curve": []
 }
