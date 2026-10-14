@@ -23,5 +23,13 @@
   "btc_hodl_qty": 0.0,
   "peak_equity": 10000.0,
   "trades": [],
-  "equity_curve": []
+  "equity_curve": [
+    {
+      "timestamp": "2026-10-14 12:02",
+      "equity": 10000.0,
+      "btc_hodl": 10000.0,
+      "dd_pct": 0.0,
+      "regime": "Neutral"
+    }
+  ]
 }

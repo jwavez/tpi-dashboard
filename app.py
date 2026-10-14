@@ -348,12 +348,12 @@ def compute_live_tpi():
         cash_w = 20
         alts_w = 0
 
-        # Equity curve — prefer real paper book equity when available
+        # Equity curve — use paper book equity when available, else fresh $10k
         dates = btc.index[-60:]
         btc_slice = btc.iloc[-60:].astype(float)
         raw_eq = 10000 * (1 + (btc_slice.pct_change().fillna(0).cumsum() * 0.45))
         paper_eq = _load_latest_equity()
-        target_balance = paper_eq if paper_eq and paper_eq > 0 else 9927.09
+        target_balance = paper_eq if paper_eq and paper_eq > 0 else 10000.0
         scale = target_balance / float(raw_eq.iloc[-1]) if float(raw_eq.iloc[-1]) != 0 else 1.0
         eq = raw_eq * scale
         btc_hodl = 10000 * (btc_slice / btc_slice.iloc[0])
