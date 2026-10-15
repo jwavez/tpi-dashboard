@@ -18,7 +18,7 @@
   "last_rebalance": "2026-10-15 13:28",
   "start_btc_px": 80169.0,
   "btc_hodl_qty": 0.12473649415609525,
-  "peak_equity": 10000.0,
+  "peak_equity": 10049.090253038505,
   "trades": [
     {
       "ts": "2026-10-15 13:28",
@@ -60,6 +60,13 @@
       "timestamp": "2026-10-15 13:28",
       "equity": 10000.0,
       "btc_hodl": 10000.0,
+      "dd_pct": 0.0,
+      "regime": "Bullish"
+    },
+    {
+      "timestamp": "2026-10-15 14:09",
+      "equity": 10049.09,
+      "btc_hodl": 10077.12,
       "dd_pct": 0.0,
       "regime": "Bullish"
     }
