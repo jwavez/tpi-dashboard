@@ -236,7 +236,7 @@ def _load_paper_positions(live_prices=None):
 
 
 def _load_paper_trades():
-    """Load recent trades. Add P&L column for sells when possible."""
+    """Load recent trades. Show realized P&L on sells; mark-to-market on still-open buys."""
     book = _load_paper_book()
     rows = []
     trades = []
@@ -259,7 +259,7 @@ def _load_paper_trades():
         except Exception:
             pass
 
-    # Build cost basis map for simple P&L on sells
+    # Cost basis for realized P&L on sells
     avg_cost = {}
     for t in trades:
         sym = t.get("sym")
@@ -273,20 +273,37 @@ def _load_paper_trades():
             avg_cost[sym] = (new_qty, new_px)
         elif side == "SELL" and qty > 0:
             cost_px = avg_cost.get(sym, (0, px))[1]
-            pnl = (px - cost_px) * qty
-            t["_pnl"] = pnl
+            t["_pnl"] = (px - cost_px) * qty
             prev_qty, prev_px = avg_cost.get(sym, (0, 0))
             avg_cost[sym] = (max(0, prev_qty - qty), prev_px)
 
-    for t in reversed(trades[-30:]):
+    # Current prices for mark-to-market on open buys
+    live_px = {}
+    try:
+        open_pos = _load_paper_positions()
+        for p in open_pos:
+            live_px[p.get("Asset")] = float(p.get("Current") or 0)
+    except Exception:
+        pass
+
+    for t in reversed(trades[-40:]):
         pnl = t.get("_pnl")
+        side = t.get("side", "")
+        sym = t.get("sym", "")
+        if pnl is None and side == "BUY":
+            cur = live_px.get(sym) or 0
+            entry = float(t.get("px") or 0)
+            qty = float(t.get("qty") or 0)
+            if cur > 0 and entry > 0 and qty > 0:
+                pnl = (cur - entry) * qty
+        pnl_str = f"{pnl:+.2f}" if pnl is not None else "—"
         rows.append({
             "Date": str(t.get("ts", ""))[:16],
-            "Asset": t.get("sym", ""),
-            "Side": t.get("side", ""),
+            "Asset": sym,
+            "Side": side,
             "Qty": round(float(t.get("qty") or 0), 6),
             "USD": round(float(t.get("usd") or 0), 2),
-            "P&L": f"{pnl:+.2f}" if pnl is not None else "—",
+            "P&L": pnl_str,
             "Reason": str(t.get("reason", ""))[:40],
         })
     return rows
@@ -588,11 +605,35 @@ a3.metric("Total P&L", f"${pnl:,.2f}", f"{pnl_pct:+.2f}%")
 a4.metric("Open Positions", str(len(data["open_positions"])))
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Target mix
+# Target mix — show actual holdings from open positions when available
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Target Mix")
+open_pos = data.get("open_positions") or []
+if open_pos:
+    total_usd = sum(float(p.get("USD") or 0) for p in open_pos)
+    if total_usd > 0:
+        btc_usd = sum(float(p.get("USD") or 0) for p in open_pos if p.get("Asset") == "BTC")
+        eth_usd = sum(float(p.get("USD") or 0) for p in open_pos if p.get("Asset") == "ETH")
+        gold_usd = sum(float(p.get("USD") or 0) for p in open_pos if p.get("Asset") == "GOLD")
+        alt_usd = sum(float(p.get("USD") or 0) for p in open_pos if p.get("Asset") not in ("BTC", "ETH", "GOLD"))
+        cash_usd = max(0, data["balance"] - total_usd)
+        total_all = total_usd + cash_usd
+        if total_all > 0:
+            values = [
+                round(100 * btc_usd / total_all, 1),
+                round(100 * eth_usd / total_all, 1),
+                round(100 * gold_usd / total_all, 1),
+                round(100 * cash_usd / total_all, 1),
+                round(100 * alt_usd / total_all, 1),
+            ]
+        else:
+            values = [data["btc"], data["eth"], data["gold"], data["cash"], data["alts"]]
+    else:
+        values = [data["btc"], data["eth"], data["gold"], data["cash"], data["alts"]]
+else:
+    values = [data["btc"], data["eth"], data["gold"], data["cash"], data["alts"]]
+
 assets = ["₿ BTC", "Ξ ETH", "🪙 Gold", "💵 Cash", "✦ Alts"]
-values = [data["btc"], data["eth"], data["gold"], data["cash"], data["alts"]]
 colors = ["#f7931a", "#627eea", "#eab308", "#64748b", "#8b5cf6"]
 fig = go.Figure()
 for asset, val, color in zip(assets, values, colors):
@@ -639,8 +680,20 @@ closed_df = pd.DataFrame(data["closed_trades"])
 if closed_df.empty:
     st.info("No closed trades recorded yet. Position tracking starts from this login. Future closes will appear here with real P&L.")
 else:
+    # Overlay live unrealized P&L for still-open buys
+    open_map = {p.get("Asset"): p for p in (data.get("open_positions") or [])}
+    if "P&L" in closed_df.columns and "Asset" in closed_df.columns:
+        def _pnl_cell(row):
+            if str(row.get("P&L", "—")) not in ("—", "", "nan"):
+                return row["P&L"]
+            op = open_map.get(row.get("Asset"))
+            if op and str(row.get("Side", "")).upper() == "BUY":
+                return op.get("P&L", "—")
+            return "—"
+        closed_df = closed_df.copy()
+        closed_df["P&L"] = closed_df.apply(_pnl_cell, axis=1)
     if "P&L" in closed_df.columns:
-        st.dataframe(closed_df.head(6).style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
+        st.dataframe(closed_df.head(8).style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
         with st.expander("View full closed trade history"):
             st.dataframe(closed_df.style.map(color_pnl, subset=["P&L"]), hide_index=True, use_container_width=True)
     else:
@@ -650,12 +703,25 @@ st.markdown("</div>", unsafe_allow_html=True)
 # Alt sleeve
 st.markdown('<div class="main-card">', unsafe_allow_html=True)
 st.subheader("Alt Sleeve")
-cols = st.columns(5)
-for i, a in enumerate(data["alt_breakdown"]):
-    with cols[i]:
-        st.markdown(f'<div style="background:#0f172a; border-radius:12px; padding:0.55rem; text-align:center; border:1px solid #334155;">'
-                    f'<div style="font-weight:700;">{a["coin"]}</div><div style="color:#8b5cf6; font-weight:650;">{a["pct"]}%</div>'
-                    f'<div style="font-size:0.65rem; color:#94a3b8;">{a["note"]}</div></div>', unsafe_allow_html=True)
+open_pos = data.get("open_positions") or []
+alt_pos = [p for p in open_pos if p.get("Asset") not in ("BTC", "ETH", "GOLD")]
+if alt_pos:
+    total_alt = sum(float(p.get("USD") or 0) for p in alt_pos)
+    cols = st.columns(min(5, len(alt_pos)))
+    for i, p in enumerate(alt_pos[:5]):
+        with cols[i]:
+            usd = float(p.get("USD") or 0)
+            pct = round(100 * usd / data["balance"], 1) if data["balance"] else 0
+            st.markdown(f'<div style="background:#0f172a; border-radius:12px; padding:0.55rem; text-align:center; border:1px solid #334155;">'
+                        f'<div style="font-weight:700;">{p.get("Asset","")}</div><div style="color:#8b5cf6; font-weight:650;">{pct}%</div>'
+                        f'<div style="font-size:0.65rem; color:#94a3b8;">${usd:,.0f}</div></div>', unsafe_allow_html=True)
+else:
+    cols = st.columns(5)
+    for i, a in enumerate(data["alt_breakdown"][:5]):
+        with cols[i]:
+            st.markdown(f'<div style="background:#0f172a; border-radius:12px; padding:0.55rem; text-align:center; border:1px solid #334155;">'
+                        f'<div style="font-weight:700;">{a["coin"]}</div><div style="color:#8b5cf6; font-weight:650;">{a["pct"]}%</div>'
+                        f'<div style="font-size:0.65rem; color:#94a3b8;">{a["note"]}</div></div>', unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 # Key stats
