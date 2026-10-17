@@ -227,6 +227,13 @@
       "btc_hodl": 10222.44,
       "dd_pct": 0.0,
       "regime": "Bullish"
+    },
+    {
+      "timestamp": "2026-10-17 12:13",
+      "equity": 10135.28,
+      "btc_hodl": 10158.14,
+      "dd_pct": -0.54,
+      "regime": "Bullish"
     }
   ]
 }
