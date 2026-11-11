@@ -38,3 +38,6 @@ timestamp,side,symbol,qty,price,usd,reason
 2026-11-10 16:26,SELL,GOLD,0.00907966,4046.0000,36.74,regime Bullish->Neutral
 2026-11-10 16:26,BUY,ETH,0.04853970,2022.2100,98.16,regime Bullish->Neutral
 2026-11-10 16:26,BUY,BTC,0.00025885,73182.7900,18.94,regime Bullish->Neutral
+2026-11-11 16:13,BUY,GOLD,0.00619942,4010.7000,24.86,regime Neutral->Bullish
+2026-11-11 16:13,SELL,ETH,0.01174170,2077.6100,24.39,regime Neutral->Bullish
+2026-11-11 16:13,SELL,BTC,0.00023943,74164.4600,17.76,regime Neutral->Bullish
