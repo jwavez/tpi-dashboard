@@ -1,21 +1,21 @@
 {
   "started": "2026-10-14",
   "start_equity": 10000.0,
-  "cash": 1835.6010895942013,
+  "cash": 1785.058819127979,
   "positions": {
     "BTC": {
-      "qty": 0.061876035017116054
+      "qty": 0.06228194428569876
     },
     "ETH": {
-      "qty": 0.6626367880380105
+      "qty": 0.6684545362768413
     },
     "GOLD": {
-      "qty": 0.3432569918457255
+      "qty": 0.34578973431463783
     },
     "ALTS": {}
   },
-  "last_regime": "Bullish",
-  "last_rebalance": "2026-11-11 16:13",
+  "last_regime": "Neutral",
+  "last_rebalance": "2026-11-12 16:50",
   "start_btc_px": 80169.0,
   "btc_hodl_qty": 0.12473649415609525,
   "peak_equity": 10308.431579949633,
@@ -397,6 +397,33 @@
       "px": 74164.46,
       "usd": 17.757226470834212,
       "reason": "regime Neutral->Bullish"
+    },
+    {
+      "ts": "2026-11-12 16:50",
+      "side": "BUY",
+      "sym": "GOLD",
+      "qty": 0.0025327424689123206,
+      "px": 3871.7,
+      "usd": 9.80601901688783,
+      "reason": "regime Bullish->Neutral"
+    },
+    {
+      "ts": "2026-11-12 16:50",
+      "side": "BUY",
+      "sym": "ETH",
+      "qty": 0.0058177482388307635,
+      "px": 2002.82,
+      "usd": 11.651902527695029,
+      "reason": "regime Bullish->Neutral"
+    },
+    {
+      "ts": "2026-11-12 16:50",
+      "side": "BUY",
+      "sym": "BTC",
+      "qty": 0.0004059092685827079,
+      "px": 71652.34,
+      "usd": 29.084348921639503,
+      "reason": "regime Bullish->Neutral"
     }
   ],
   "equity_curve": [
@@ -798,6 +825,13 @@
       "btc_hodl": 9255.42,
       "dd_pct": -10.96,
       "regime": "Bullish"
+    },
+    {
+      "timestamp": "2026-11-12 16:50",
+      "equity": 8925.29,
+      "btc_hodl": 8937.66,
+      "dd_pct": -13.42,
+      "regime": "Neutral"
     }
   ]
 }
