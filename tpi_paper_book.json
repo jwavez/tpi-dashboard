@@ -996,6 +996,13 @@
       "btc_hodl": 8072.15,
       "dd_pct": -18.82,
       "regime": "Neutral"
+    },
+    {
+      "timestamp": "2026-11-16 19:32",
+      "equity": 8381.73,
+      "btc_hodl": 8087.55,
+      "dd_pct": -18.69,
+      "regime": "Neutral"
     }
   ]
 }
