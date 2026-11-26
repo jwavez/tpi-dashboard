@@ -1190,6 +1190,13 @@
       "btc_hodl": 7561.99,
       "dd_pct": -21.94,
       "regime": "Bearish"
+    },
+    {
+      "timestamp": "2026-11-26 18:58",
+      "equity": 8046.91,
+      "btc_hodl": 7537.57,
+      "dd_pct": -21.94,
+      "regime": "Bearish"
     }
   ]
 }
